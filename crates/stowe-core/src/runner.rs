@@ -64,16 +64,20 @@ pub fn run(mut config: RunnerConfig) -> Result<ChildOutcome> {
         // the mitigation is that the child holds the ground-truth copy and
         // our local buffer is dropped immediately after spawn.
         let s = std::str::from_utf8(val.as_slice()).map_err(|_| {
-            crate::error::Error::Invalid(format!("secret for {} is not valid UTF-8", key))
+            crate::error::Error::Invalid(format!(
+                "secret for {} contains non-UTF-8 bytes; binary secrets are not yet supported as env vars",
+                key
+            ))
         })?;
         cmd.env(key, s);
     }
 
     let mut child = cmd.spawn().map_err(crate::error::Error::Io)?;
 
-    // Drop the local copy ASAP. Zeroizing<Vec<u8>> wipes each value.
+    // Drop the local copy ASAP. clear() runs Drop on each Zeroizing<Vec<u8>>,
+    // which is what wipes the secret bytes; the empty vec then deallocates
+    // its capacity buffer at end-of-scope (no further secrets to zeroize).
     local.clear();
-    drop(local);
 
     let status: ExitStatus = child.wait().map_err(crate::error::Error::Io)?;
     let duration_ms = start.elapsed().as_millis() as i64;
@@ -91,9 +95,11 @@ mod tests {
         SecretValue::from_string(s.to_string())
     }
 
-    /// `/bin/sh -c 'exit 0'` — basic happy path with one env var.
+    /// `/bin/sh -c 'exit 0'` — basic happy path with one env var. Verifies
+    /// the spawn pipeline survives an injected secret; injection *visibility*
+    /// is asserted in `injected_var_is_visible_to_child`.
     #[test]
-    fn injects_env_into_child() {
+    fn happy_path_with_secret_env() {
         let outcome = run(RunnerConfig {
             binary_path: "/bin/sh".into(),
             args: vec!["-c".into(), "exit 0".into()],
