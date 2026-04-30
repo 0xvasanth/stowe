@@ -1,13 +1,21 @@
 import { useEffect, useState } from "react";
-import { listVars } from "../tauri";
+import { listVars, deleteSecret } from "../tauri";
+import { RevealDialog } from "./RevealDialog";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 interface Props {
   namespace: string | null;
+  /** Increment to force a refetch of the variables list. */
+  refreshKey: number;
+  onChanged: () => void;
 }
 
-export function ProjectDetail({ namespace }: Props) {
+export function ProjectDetail({ namespace, refreshKey, onChanged }: Props) {
   const [vars, setVars] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [revealing, setRevealing] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!namespace) {
@@ -19,7 +27,19 @@ export function ProjectDetail({ namespace }: Props) {
     listVars(namespace)
       .then(setVars)
       .catch((e) => setError(String(e)));
-  }, [namespace]);
+  }, [namespace, refreshKey]);
+
+  async function confirmDelete(v: string) {
+    if (!namespace) return;
+    setDeleteError(null);
+    try {
+      await deleteSecret(namespace, v);
+      setDeleting(null);
+      onChanged();
+    } catch (e) {
+      setDeleteError(String(e));
+    }
+  }
 
   if (!namespace)
     return (
@@ -30,36 +50,74 @@ export function ProjectDetail({ namespace }: Props) {
   if (error)
     return <div className="project-detail error">Error: {error}</div>;
   if (vars === null) return <div className="project-detail loading">Loading…</div>;
-  if (vars.length === 0)
-    return (
-      <div className="project-detail empty">
-        Namespace <code>{namespace}</code> has no variables.
-      </div>
-    );
 
   return (
     <div className="project-detail">
       <h2>{namespace}</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Variable</th>
-          </tr>
-        </thead>
-        <tbody>
-          {vars.map((v) => (
-            <tr key={v}>
-              <td>
-                <code>{v}</code>
-              </td>
+      {vars.length === 0 ? (
+        <p className="empty">
+          Namespace <code>{namespace}</code> has no variables yet. Use the
+          "+ Add secret" button in the header to add one.
+        </p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Variable</th>
+              <th className="actions-col">Actions</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="note">
-        Use <code>stowe reveal {namespace} &lt;VAR&gt;</code> in a terminal to
-        view a value.
-      </p>
+          </thead>
+          <tbody>
+            {vars.map((v) => (
+              <tr key={v}>
+                <td>
+                  <code>{v}</code>
+                </td>
+                <td className="actions-col">
+                  <button
+                    className="btn-link"
+                    onClick={() => setRevealing(v)}
+                  >
+                    Reveal
+                  </button>
+                  <button
+                    className="btn-link btn-link-destructive"
+                    onClick={() => {
+                      setDeleting(v);
+                      setDeleteError(null);
+                    }}
+                  >
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {revealing && (
+        <RevealDialog
+          namespace={namespace}
+          variable={revealing}
+          onClose={() => setRevealing(null)}
+        />
+      )}
+
+      {deleting && (
+        <ConfirmDialog
+          title={`Delete ${deleting}?`}
+          message={
+            deleteError
+              ? `Delete failed: ${deleteError}`
+              : `This will permanently remove ${deleting} from ${namespace}.`
+          }
+          confirmLabel="Delete"
+          destructive={true}
+          onConfirm={() => confirmDelete(deleting)}
+          onCancel={() => setDeleting(null)}
+        />
+      )}
     </div>
   );
 }
