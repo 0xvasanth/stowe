@@ -44,6 +44,9 @@ impl Manifest {
     /// Walk from `start` upward looking for a `stowe.toml` file. Returns the
     /// resolved absolute path and parsed manifest, or `Ok(None)` if no
     /// manifest is found before reaching the filesystem root.
+    ///
+    /// `start` must exist on disk — `canonicalize` is called immediately
+    /// and returns `Error::Io` if the path does not exist.
     pub fn find_from(start: impl AsRef<Path>) -> Result<Option<(PathBuf, Self)>> {
         let start = start.as_ref().canonicalize()?;
         let mut cur: &Path = &start;
