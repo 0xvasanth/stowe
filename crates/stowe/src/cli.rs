@@ -20,6 +20,10 @@ pub enum Command {
         namespace: String,
         /// Variable name (e.g. ANTHROPIC_API_KEY).
         var: String,
+        /// Biometric protection: "never" (dev default) or "always" (requires
+        /// signed binary; will fail with errSecMissingEntitlement otherwise).
+        #[arg(long, default_value = "never", value_parser = ["always", "never"])]
+        biometric: String,
     },
 
     /// List namespaces, or variables within a single namespace.

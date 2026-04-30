@@ -1,6 +1,7 @@
 use stowe_core::{Result, SecretValue, Vault};
 
 /// Store `value` at `(namespace, var)`. Overwrites existing.
+#[allow(dead_code)]
 pub fn run(vault: &mut dyn Vault, namespace: &str, var: &str, value: SecretValue) -> Result<()> {
     vault.set(namespace, var, value)
 }
