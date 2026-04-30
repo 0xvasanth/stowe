@@ -44,6 +44,23 @@ impl KeychainVault {
         format!("{}{}", SERVICE_PREFIX, namespace)
     }
 
+    /// Reject namespace/var names with characters that confuse the Keychain
+    /// service-name format (whitespace, slashes, control bytes) or are empty.
+    fn validate_name(label: &str, value: &str) -> Result<()> {
+        if value.is_empty() {
+            return Err(Error::Invalid(format!("{} must be non-empty", label)));
+        }
+        for ch in value.chars() {
+            if ch.is_whitespace() || ch.is_control() || ch == '/' {
+                return Err(Error::Invalid(format!(
+                    "{} contains disallowed character: {:?}",
+                    label, ch
+                )));
+            }
+        }
+        Ok(())
+    }
+
     fn map_sf_err(e: security_framework::base::Error, namespace: &str, var: &str) -> Error {
         if e.code() == ERR_SEC_ITEM_NOT_FOUND {
             return Error::NotFound {
@@ -60,9 +77,8 @@ impl KeychainVault {
 
 impl Vault for KeychainVault {
     fn set(&mut self, namespace: &str, var: &str, value: SecretValue) -> Result<()> {
-        if namespace.is_empty() || var.is_empty() {
-            return Err(Error::Invalid("namespace and var must be non-empty".into()));
-        }
+        Self::validate_name("namespace", namespace)?;
+        Self::validate_name("var", var)?;
         let service = Self::service(namespace);
         set_generic_password(&service, var, value.expose())
             .map_err(|e| Self::map_sf_err(e, namespace, var))?;
@@ -209,5 +225,27 @@ mod tests {
         assert!(matches!(err1, Err(Error::Invalid(_))));
         let err2 = v.set("ns", "", SecretValue::from_string("v".into()));
         assert!(matches!(err2, Err(Error::Invalid(_))));
+    }
+
+    #[test]
+    fn disallowed_characters_rejected() {
+        let (mut v, _d) = fresh_vault();
+        let cases = vec![
+            ("ns with space", "X"),
+            ("ns/slash", "X"),
+            ("ns", "var with space"),
+            ("ns", "var/slash"),
+            ("ns", "var\twith\ttab"),
+        ];
+        for (ns, var) in cases {
+            let result = v.set(ns, var, SecretValue::from_string("v".into()));
+            assert!(
+                matches!(result, Err(Error::Invalid(_))),
+                "expected Invalid for ({:?}, {:?}), got {:?}",
+                ns,
+                var,
+                result
+            );
+        }
     }
 }
