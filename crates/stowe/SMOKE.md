@@ -213,3 +213,100 @@ rm -rf "$TMPDIR_M3"
   `Command::spawn` (exec). Real but small; an attacker with same-user
   fs-write access could swap the binary in between. Deferred to a focused
   follow-up after M3.
+
+---
+
+## M4 additions: sandbox-exec wrapping
+
+### Sandbox blocks out-of-allowlist file writes
+
+```bash
+TMPDIR_M4=$(mktemp -d)
+NS="m4sandbox.$(date +%s)"
+cat > "$TMPDIR_M4/stowe.toml" <<INNER
+namespace = "$NS"
+
+[policy]
+allow_unsigned = true
+
+[policy.sandbox]
+enabled = true
+INNER
+
+# Inside the sandbox, /bin/sh tries to write to /private/etc — should fail.
+cd "$TMPDIR_M4" && "$STOWE" run /bin/sh -c \
+  '(echo blocked > /private/etc/stowe-test 2>/dev/null) && echo "WROTE (BAD)" || echo "BLOCKED (OK)"'
+# Expected stdout: BLOCKED (OK)
+
+sqlite3 ~/Library/Application\ Support/stowe/audit.db \
+  "DELETE FROM accesses WHERE namespace = '$NS';"
+rm -rf "$TMPDIR_M4"
+```
+
+### Sandbox allows writes inside project root
+
+```bash
+TMPDIR_M4=$(mktemp -d)
+NS="m4sandbox-allow.$(date +%s)"
+cat > "$TMPDIR_M4/stowe.toml" <<INNER
+namespace = "$NS"
+
+[policy]
+allow_unsigned = true
+
+[policy.sandbox]
+enabled = true
+INNER
+
+cd "$TMPDIR_M4" && "$STOWE" run /bin/sh -c 'echo ok > inside.txt && cat inside.txt'
+# Expected stdout: ok
+
+sqlite3 ~/Library/Application\ Support/stowe/audit.db \
+  "DELETE FROM accesses WHERE namespace = '$NS';"
+rm -rf "$TMPDIR_M4"
+```
+
+### Network allowlist (manual; needs internet)
+
+```bash
+TMPDIR_M4=$(mktemp -d)
+NS="m4sandbox-net.$(date +%s)"
+cat > "$TMPDIR_M4/stowe.toml" <<INNER
+namespace = "$NS"
+
+[policy]
+allowed_binaries = ["curl"]
+
+[policy.sandbox]
+enabled = true
+network_allow = ["www.example.com"]
+INNER
+
+# Allowed host — should succeed.
+cd "$TMPDIR_M4" && "$STOWE" run curl --silent --max-time 5 https://www.example.com >/dev/null && echo "OK"
+# Expected: OK
+
+# Disallowed host — should fail.
+cd "$TMPDIR_M4" && "$STOWE" run curl --silent --max-time 5 https://www.google.com >/dev/null \
+  && echo "GOT GOOGLE (BAD)" || echo "BLOCKED (OK)"
+# Expected: BLOCKED (OK)
+
+sqlite3 ~/Library/Application\ Support/stowe/audit.db \
+  "DELETE FROM accesses WHERE namespace = '$NS';"
+rm -rf "$TMPDIR_M4"
+```
+
+### Notes on sandbox-exec
+
+- `sandbox-exec` is officially deprecated by Apple but still functional in
+  every shipping macOS release through 15.x. M4 takes the deprecation as
+  acceptable risk for v0.4. If a future macOS removes `sandbox-exec`, the
+  fallback is either Endpoint Security framework or dropping sandbox
+  support and recommending containers.
+- The profile uses `(deny default)` then explicit allows. The default-deny
+  covers anything not listed.
+- `mach-lookup` and `sysctl-read` are broadly allowed because denying them
+  breaks too many legitimate libc/dyld calls. We rely on the network and
+  fs allowlists for the actual security gates.
+- Binary lives at `/usr/bin/sandbox-exec` on current macOS (not `/usr/sbin/`
+  as some older docs say).
