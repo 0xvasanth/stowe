@@ -378,3 +378,54 @@ rm -rf "$TMPDIR_M5"
   to push events when reveal/edit flows demand finer-grained updates.
 - **macOS may prompt for Keychain access** the first time the UI loads
   namespaces (same prompt as the M2 CLI). Click "Always Allow" once.
+
+---
+
+## M5b additions: edit flows in the desktop UI
+
+### Reveal a non-biometric secret
+
+Prereq: have at least one secret with `--biometric=never` (the M3 default).
+If you don't, add one via CLI: `"$STOWE" add demo MYKEY` and type `secret-value`.
+
+1. Launch UI: `"$STOWE" ui`.
+2. Click "demo" in the sidebar.
+3. Click "Reveal" next to MYKEY.
+4. The dialog shows the value masked (e.g., `••••••value`).
+5. Click "Show full value" — the full secret renders.
+6. Click "Copy to clipboard" — the dialog confirms with a 30-second
+   auto-clear notice.
+7. Paste somewhere within 30s: gets the value. Wait 30s, paste again:
+   gets an empty string.
+
+### Try to reveal a biometric secret (will fail in dev-cut)
+
+Try to add a `--biometric=always` secret via CLI; expect `errSecMissingEntitlement`
+until M6. The UI's reveal of an existing biometric secret would show a
+similar error. Documented limit; not a bug.
+
+### Add a secret via the UI
+
+1. Launch UI.
+2. Click any namespace in the sidebar.
+3. Click "+ Add secret" in the top-right.
+4. Fill: variable name "TEST_NEW", value "test-value", biometric "never".
+5. Click "Add".
+6. The dialog closes, the variable list refreshes, "TEST_NEW" appears.
+
+### Delete a secret via the UI
+
+1. Click "Delete" next to TEST_NEW.
+2. Confirm dialog appears with destructive styling.
+3. Click "Delete" to confirm.
+4. Variable disappears from the list.
+
+### Notes on M5b
+
+- **Edit-existing secret** is a future M5c convenience — for now, delete + add.
+- **Export and Wipe** UIs deferred to M5c.
+- **Audit log full view** with filters/expand still M5c. The bottom strip
+  shows the most recent 25 rows.
+- **Clipboard auto-clear** writes empty string to the system clipboard after
+  30s. Clipboard managers (Alfred, Maccy, Raycast) keep history independently
+  and aren't affected.
