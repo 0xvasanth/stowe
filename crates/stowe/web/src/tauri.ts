@@ -81,3 +81,41 @@ export function lastFour(value: string): string {
   if (value.length <= 4) return "•".repeat(value.length);
   return "•".repeat(value.length - 4) + value.slice(-4);
 }
+
+import { save } from "@tauri-apps/plugin-dialog";
+
+export type ExportFormat = "encrypted" | "env";
+
+export interface WipeReport {
+  namespaces_deleted: number;
+  vars_deleted: number;
+  audit_rows_deleted: number;
+}
+
+export async function exportVault(
+  namespaces: string[],
+  format: ExportFormat,
+  passphrase: string | null,
+  path: string,
+): Promise<void> {
+  return invoke<void>("export_vault_cmd", {
+    namespaces,
+    format,
+    passphrase,
+    path,
+  });
+}
+
+export async function wipeAll(alsoAudit: boolean): Promise<WipeReport> {
+  return invoke<WipeReport>("wipe_all_cmd", { alsoAudit });
+}
+
+export async function chooseSavePath(
+  defaultName: string,
+): Promise<string | null> {
+  const result = await save({
+    defaultPath: defaultName,
+    filters: [{ name: "All", extensions: ["*"] }],
+  });
+  return result;
+}
