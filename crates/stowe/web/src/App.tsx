@@ -3,16 +3,25 @@ import { VaultList } from "./components/VaultList";
 import { ProjectDetail } from "./components/ProjectDetail";
 import { AuditFeed } from "./components/AuditFeed";
 import { AddSecretDialog } from "./components/AddSecretDialog";
+import { ExportDialog } from "./components/ExportDialog";
+import { WipeDialog } from "./components/WipeDialog";
 
 export default function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [namespacesKey, setNamespacesKey] = useState(0);
   const [adding, setAdding] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [wiping, setWiping] = useState(false);
 
   function handleChanged() {
     setRefreshKey((k) => k + 1);
     setNamespacesKey((k) => k + 1);
+  }
+
+  function handleWiped() {
+    setSelected(null);
+    handleChanged();
   }
 
   return (
@@ -28,6 +37,18 @@ export default function App() {
               + Add secret
             </button>
           )}
+          <button
+            className="btn-secondary"
+            onClick={() => setExporting(true)}
+          >
+            Export
+          </button>
+          <button
+            className="btn-secondary btn-danger-tone"
+            onClick={() => setWiping(true)}
+          >
+            Wipe…
+          </button>
         </div>
       </header>
       <main className="app-main">
@@ -59,6 +80,15 @@ export default function App() {
             handleChanged();
           }}
           onCancel={() => setAdding(false)}
+        />
+      )}
+
+      {exporting && <ExportDialog onClose={() => setExporting(false)} />}
+
+      {wiping && (
+        <WipeDialog
+          onClose={() => setWiping(false)}
+          onWiped={handleWiped}
         />
       )}
     </div>

@@ -409,3 +409,10 @@ html, body, #root {
   gap: 8px;
   margin: 12px 0;
 }
+
+.btn-danger-tone {
+  color: #ff3b30;
+}
+.btn-danger-tone:hover {
+  background: rgba(255, 59, 48, 0.12);
+}
