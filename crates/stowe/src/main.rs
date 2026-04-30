@@ -1,3 +1,5 @@
+#[allow(dead_code)]
+mod binary;
 mod cli;
 mod commands;
 
@@ -9,29 +11,6 @@ use stowe_core::{Audit, KeychainVault, Manifest, SecretValue};
 
 fn open_vault() -> Result<KeychainVault> {
     KeychainVault::open_default().context("opening Keychain vault")
-}
-
-fn resolve_binary(name: &str) -> Result<String> {
-    // If the user passed an absolute or relative path containing /, use it directly.
-    if name.contains('/') {
-        return Ok(name.to_string());
-    }
-    // Otherwise resolve via /usr/bin/which (built-in macOS binary).
-    let output = std::process::Command::new("/usr/bin/which")
-        .arg(name)
-        .output()
-        .with_context(|| format!("resolving binary `{}` via /usr/bin/which", name))?;
-    if !output.status.success() {
-        return Err(anyhow!("binary not found in PATH: {}", name));
-    }
-    let resolved = String::from_utf8(output.stdout)
-        .with_context(|| format!("non-UTF-8 path for `{}`", name))?
-        .trim()
-        .to_string();
-    if resolved.is_empty() {
-        return Err(anyhow!("which returned empty path for {}", name));
-    }
-    Ok(resolved)
 }
 
 fn main() -> Result<()> {
@@ -99,7 +78,7 @@ fn main() -> Result<()> {
             let (manifest_path, manifest) = Manifest::find_from_or_err(&cwd)
                 .with_context(|| format!("looking for stowe.toml from {}", cwd.display()))?;
             let bin_name = argv[0].clone();
-            let resolved = resolve_binary(&bin_name)?;
+            let resolved = binary::resolve(&bin_name)?;
             let rest_args = argv[1..].to_vec();
             let vault = open_vault()?;
             let audit = Audit::open_default().context("opening audit log")?;
