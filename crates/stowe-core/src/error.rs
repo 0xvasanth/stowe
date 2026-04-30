@@ -19,6 +19,9 @@ pub enum Error {
 
     #[error("toml parse error: {0}")]
     Toml(String),
+
+    #[error("no stowe.toml found in {start} or any ancestor")]
+    ManifestNotFound { start: String },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
