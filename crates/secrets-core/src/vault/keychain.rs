@@ -11,6 +11,10 @@ use crate::{
 
 const SERVICE_PREFIX: &str = "secrets.";
 
+/// `errSecItemNotFound` from Apple's `Security.framework`. Not re-exported
+/// by the `security-framework` crate; we use the numeric value directly.
+const ERR_SEC_ITEM_NOT_FOUND: i32 = -25300;
+
 /// macOS Keychain-backed Vault. Stores values as Generic Password items
 /// under service `secrets.<namespace>` and account `<VAR>`.
 ///
@@ -40,23 +44,23 @@ impl KeychainVault {
     }
 
     fn map_sf_err(e: security_framework::base::Error, namespace: &str, var: &str) -> Error {
-        // -25300 = errSecItemNotFound
-        if e.code() == -25300 {
+        if e.code() == ERR_SEC_ITEM_NOT_FOUND {
             return Error::NotFound {
                 namespace: namespace.to_string(),
                 var: var.to_string(),
             };
         }
-        Error::Keychain(format!("{} (code {})", e, e.code()))
+        Error::Keychain(match e.message() {
+            Some(msg) => format!("{msg} (code {})", e.code()),
+            None => format!("keychain error code {}", e.code()),
+        })
     }
 }
 
 impl Vault for KeychainVault {
     fn set(&mut self, namespace: &str, var: &str, value: SecretValue) -> Result<()> {
         if namespace.is_empty() || var.is_empty() {
-            return Err(Error::Invalid(
-                "namespace and var must be non-empty".into(),
-            ));
+            return Err(Error::Invalid("namespace and var must be non-empty".into()));
         }
         let service = Self::service(namespace);
         set_generic_password(&service, var, value.expose())
@@ -68,8 +72,8 @@ impl Vault for KeychainVault {
 
     fn get(&self, namespace: &str, var: &str) -> Result<SecretValue> {
         let service = Self::service(namespace);
-        let bytes = get_generic_password(&service, var)
-            .map_err(|e| Self::map_sf_err(e, namespace, var))?;
+        let bytes =
+            get_generic_password(&service, var).map_err(|e| Self::map_sf_err(e, namespace, var))?;
         Ok(SecretValue::new(bytes))
     }
 
@@ -118,7 +122,10 @@ mod tests {
 
     fn cleanup(v: &mut KeychainVault, ns: &str, vars: &[&str]) {
         for var in vars {
-            let _ = v.delete(ns, var);
+            match v.delete(ns, var) {
+                Ok(()) | Err(Error::NotFound { .. }) => {}
+                Err(e) => panic!("cleanup failed for {var}: {e}"),
+            }
         }
     }
 
@@ -142,7 +149,11 @@ mod tests {
         let (v, _d) = fresh_vault();
         let ns = unique_namespace();
         let result = v.get(&ns, "MISSING");
-        assert!(matches!(result, Err(Error::NotFound { .. })), "got {:?}", result.err());
+        assert!(
+            matches!(result, Err(Error::NotFound { .. })),
+            "got {:?}",
+            result.err()
+        );
     }
 
     #[test]
