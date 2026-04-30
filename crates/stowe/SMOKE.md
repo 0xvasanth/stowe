@@ -90,3 +90,126 @@ if [ $SMOKE_EXIT -eq 0 ]; then echo "OVERALL: OK"; else echo "OVERALL: FAILED"; 
   being suppressed.
 - **`SecKeychainSearchCopyNext: not found` after cleanup** — expected; means
   the cleanup deletes worked.
+
+---
+
+## M3 additions: ACL & per-binary hardening
+
+### Biometric flag (Touch ID)
+
+**Dev-cut limitation:** `--biometric=always` calls `SecItemAdd` with a biometric
+`SecAccessControl`, which requires the calling binary to be signed with
+`keychain-access-groups` entitlements. Unsigned `target/debug/stowe` fails
+with `errSecMissingEntitlement` (-34018). The default in M3 is therefore
+`--biometric=never`; `always` will work once M6 ships proper signing.
+
+```bash
+NS="m3bio.$(date +%s)"
+"$STOWE" add --biometric=never "$NS" PLAIN_TEST       # type: hello-plain
+"$STOWE" reveal "$NS" PLAIN_TEST                       # no prompt; prints: hello-plain
+
+# This will fail with errSecMissingEntitlement until M6:
+"$STOWE" add --biometric=always "$NS" BIO_TEST
+# Expected: keychain error: ... (code -34018)
+
+security delete-generic-password -a "PLAIN_TEST" -s "stowe.${NS}"
+```
+
+### `allowed_binaries` denial
+
+```bash
+TMPDIR_M3=$(mktemp -d)
+NS="m3deny.$(date +%s)"
+cat > "$TMPDIR_M3/stowe.toml" <<INNER
+namespace = "$NS"
+
+[policy]
+allowed_binaries = ["cargo"]
+INNER
+
+cd "$TMPDIR_M3" && "$STOWE" run /bin/sh -c 'echo hi'
+# Expected stderr: stowe: denied: binary "sh" not in allowed_binaries ["cargo"]
+# Expected exit:   2
+
+sqlite3 ~/Library/Application\ Support/stowe/audit.db \
+  "SELECT outcome, reason FROM accesses WHERE namespace = '$NS' ORDER BY id DESC LIMIT 1;"
+# Expected: denied|binary "sh" not in allowed_binaries [...]
+
+sqlite3 ~/Library/Application\ Support/stowe/audit.db \
+  "DELETE FROM accesses WHERE namespace = '$NS';"
+rm -rf "$TMPDIR_M3"
+```
+
+### Unsigned-binary denial
+
+```bash
+TMPDIR_M3=$(mktemp -d)
+NS="m3unsigned.$(date +%s)"
+echo 'int main(){return 0;}' > "$TMPDIR_M3/hello.c"
+/usr/bin/cc "$TMPDIR_M3/hello.c" -o "$TMPDIR_M3/hello"
+/usr/bin/codesign --remove-signature "$TMPDIR_M3/hello" 2>/dev/null || true
+
+cat > "$TMPDIR_M3/stowe.toml" <<INNER
+namespace = "$NS"
+INNER
+
+cd "$TMPDIR_M3" && "$STOWE" run "$TMPDIR_M3/hello"
+# Expected: stowe: denied: binary ".../hello" is not codesigned ...
+# Exit 2
+
+# Allow it explicitly:
+cat > "$TMPDIR_M3/stowe.toml" <<INNER
+namespace = "$NS"
+
+[policy]
+allow_unsigned = true
+INNER
+
+cd "$TMPDIR_M3" && "$STOWE" run "$TMPDIR_M3/hello"
+# Expected exit: 0
+
+sqlite3 ~/Library/Application\ Support/stowe/audit.db \
+  "DELETE FROM accesses WHERE namespace = '$NS';"
+rm -rf "$TMPDIR_M3"
+```
+
+### Excluded build directory
+
+The runner refuses binaries inside `node_modules/`, `.venv/`, `venv/`,
+`target/`, `build/`, `dist/`, `.next/` — even if they're in
+`allowed_binaries`. Catches the malicious-postinstall pattern where
+`./node_modules/.bin/fake-npm` shadows real `npm`.
+
+```bash
+TMPDIR_M3=$(mktemp -d)
+NS="m3excluded.$(date +%s)"
+mkdir -p "$TMPDIR_M3/node_modules/.bin"
+cp /bin/sh "$TMPDIR_M3/node_modules/.bin/sh"
+
+cat > "$TMPDIR_M3/stowe.toml" <<INNER
+namespace = "$NS"
+
+[policy]
+allow_unsigned = true
+INNER
+
+cd "$TMPDIR_M3" && "$STOWE" run "$TMPDIR_M3/node_modules/.bin/sh" -c 'exit 0'
+# Expected: stowe: denied: binary "..." is inside excluded build directory node_modules/
+
+sqlite3 ~/Library/Application\ Support/stowe/audit.db \
+  "DELETE FROM accesses WHERE namespace = '$NS';"
+rm -rf "$TMPDIR_M3"
+```
+
+### Notes on M3 dev-cut
+
+- **Partition list is not active** because `target/debug/stowe` is unsigned.
+  Once M6 ships signing, partition-list scoping will activate and only
+  `stowe` itself will be able to read items via Keychain APIs.
+- **Biometric ACL items can't be created** from unsigned builds (M5's
+  `set_with_biometric_always_persists_acl` test is gated on M6 for the
+  same reason).
+- **TOCTOU window** between `binary::verify` (codesign check) and
+  `Command::spawn` (exec). Real but small; an attacker with same-user
+  fs-write access could swap the binary in between. Deferred to a focused
+  follow-up after M3.
