@@ -3,9 +3,14 @@ members = ["crates/stowe-core", "crates/stowe"]
 resolver = "2"
 
 [workspace.package]
-edition = "2021"
-license = "MIT"
-authors = ["Vasanth"]
+edition     = "2021"
+license     = "MIT"
+authors     = ["Vasanth <itsparser@gmail.com>"]
+description = "Local-first secrets vault for macOS, backed by the system Keychain."
+repository  = "https://github.com/0xvasanth/stowe"
+homepage    = "https://github.com/0xvasanth/stowe"
+keywords    = ["secrets", "keychain", "vault", "macos", "cli"]
+categories  = ["command-line-utilities", "development-tools"]
 
 [workspace.dependencies]
 thiserror   = "1.0"
