@@ -1,3 +1,6 @@
 /target
 **/*.rs.bk
 .DS_Store
+
+# Internal planning docs (specs, plans) — kept on disk, not published.
+/docs/
