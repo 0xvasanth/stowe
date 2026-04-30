@@ -98,3 +98,46 @@ pub fn recent_accesses_cmd(limit: i64) -> Result<Vec<AuditRow>, String> {
     }
     Ok(out)
 }
+
+#[tauri::command]
+pub fn reveal_secret_cmd(namespace: String, var: String) -> Result<String, String> {
+    let vault = KeychainVault::open_default().map_err(|e| e.to_string())?;
+    let value = stowe_core::Vault::get(&vault, &namespace, &var).map_err(|e| e.to_string())?;
+    // The frontend treats this as a string. UTF-8-only secrets are supported
+    // (matches the runner's existing constraint).
+    std::str::from_utf8(value.expose())
+        .map(|s| s.to_string())
+        .map_err(|_| {
+            "secret contains non-UTF-8 bytes; binary secrets cannot be revealed in the UI"
+                .to_string()
+        })
+}
+
+#[tauri::command]
+pub fn add_secret_cmd(
+    namespace: String,
+    var: String,
+    value: String,
+    biometric: String,
+) -> Result<(), String> {
+    let mode = match biometric.as_str() {
+        "always" => stowe_core::BiometricMode::Always,
+        "never" => stowe_core::BiometricMode::Never,
+        other => return Err(format!("unknown biometric mode: {}", other)),
+    };
+    let mut vault = KeychainVault::open_default().map_err(|e| e.to_string())?;
+    vault
+        .set_with_biometric(
+            &namespace,
+            &var,
+            stowe_core::SecretValue::from_string(value),
+            mode,
+        )
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_secret_cmd(namespace: String, var: String) -> Result<(), String> {
+    let mut vault = KeychainVault::open_default().map_err(|e| e.to_string())?;
+    stowe_core::Vault::delete(&mut vault, &namespace, &var).map_err(|e| e.to_string())
+}

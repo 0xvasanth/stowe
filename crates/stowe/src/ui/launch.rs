@@ -15,6 +15,9 @@ pub fn launch_ui() -> Result<()> {
             commands::list_namespaces_cmd,
             commands::list_vars_cmd,
             commands::recent_accesses_cmd,
+            commands::reveal_secret_cmd,
+            commands::add_secret_cmd,
+            commands::delete_secret_cmd,
         ])
         .run(tauri::generate_context!())
         .context("running Tauri event loop")?;
