@@ -429,3 +429,38 @@ similar error. Documented limit; not a bug.
 - **Clipboard auto-clear** writes empty string to the system clipboard after
   30s. Clipboard managers (Alfred, Maccy, Raycast) keep history independently
   and aren't affected.
+
+---
+
+## M5c additions: export + wipe
+
+### Encrypted export round-trip
+
+```bash
+"$STOWE" ui &
+# 1. Click "Export" in header.
+# 2. Format: Encrypted; passphrase: "test-passphrase"; confirm same.
+# 3. Click "Choose file & export"; pick ~/Desktop/stowe-backup-*.age.
+# 4. Confirm "Wrote backup to: ..." appears.
+# 5. Decrypt manually:
+age -d ~/Desktop/stowe-backup-*.age
+# (Prompts for passphrase; outputs the plaintext namespaces+vars dump.)
+```
+
+### Wipe with two-factor confirm
+
+```bash
+# 1. In the UI, click "Wipe…" in header.
+# 2. Try clicking "Wipe" without typing the phrase — disabled.
+# 3. Type "WIPE EVERYTHING" exactly.
+# 4. Optionally check "Also clear the audit log".
+# 5. Click "Wipe". Confirm the report shows N namespaces, M vars deleted.
+# 6. Sidebar refreshes empty.
+```
+
+### Notes on M5c
+
+- **Plaintext export** writes secrets in cleartext to disk. Use only for
+  migration; delete the file after.
+- **stowe.toml files** in projects are NOT touched by Wipe.
+- **Onboarding** and **filterable audit view** are deferred to M5d.
