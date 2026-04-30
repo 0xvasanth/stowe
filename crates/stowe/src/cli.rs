@@ -36,6 +36,17 @@ pub enum Command {
         var: String,
     },
 
+    /// Run a command with secrets injected as environment variables.
+    Run {
+        /// Path to the manifest file (default: stowe.toml).
+        #[arg(short, long, default_value = "stowe.toml")]
+        manifest: String,
+        /// Binary to run.
+        binary: String,
+        /// Arguments to pass to the binary.
+        args: Vec<String>,
+    },
+
     /// Open the desktop UI. Not yet implemented (M5).
     Ui,
 }

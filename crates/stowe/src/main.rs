@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use cli::{Cli, Command};
 use dialoguer::Password;
-use stowe_core::{KeychainVault, SecretValue};
+use stowe_core::{Audit, KeychainVault, Manifest, SecretValue};
 
 fn open_vault() -> Result<KeychainVault> {
     KeychainVault::open_default().context("opening Keychain vault")
@@ -66,6 +66,27 @@ fn main() -> Result<()> {
             let mut out = std::io::stdout().lock();
             out.write_all(value.expose())?;
             out.flush()?;
+        }
+
+        Command::Run {
+            manifest: manifest_path,
+            binary,
+            args,
+        } => {
+            let path = std::path::PathBuf::from(&manifest_path);
+            let manifest = Manifest::load(&path)
+                .with_context(|| format!("loading manifest '{}'", manifest_path))?;
+            let vault = open_vault()?;
+            let audit = Audit::open_default().context("opening audit log")?;
+            let binary_info = commands::run::ResolvedBinary {
+                path: binary,
+                argv: args,
+            };
+            let outcome = commands::run::run(&vault, &audit, &manifest, &binary_info, &path)
+                .context("running child process")?;
+            if let Some(code) = outcome.exit_code {
+                std::process::exit(code);
+            }
         }
 
         Command::Ui => {

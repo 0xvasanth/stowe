@@ -9,3 +9,6 @@ stowe-core   = { path = "../stowe-core" }
 clap         = { workspace = true }
 dialoguer    = { workspace = true }
 anyhow       = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
