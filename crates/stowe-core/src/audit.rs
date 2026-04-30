@@ -179,6 +179,39 @@ impl Audit {
         Ok(())
     }
 
+    /// Convenience: open and immediately close a row marking a denial.
+    /// Used when binary verification rejects an invocation before any
+    /// child process is spawned.
+    pub fn write_denial(
+        &self,
+        namespace: &str,
+        binary_path: &str,
+        argv: &[String],
+        reason: &str,
+    ) -> Result<AuditRowId> {
+        let info = OpenRun {
+            namespace,
+            var_names: &[],
+            binary_path,
+            binary_hash: None,
+            pid: Some(std::process::id()),
+            ppid: None,
+            argv,
+            outcome: Outcome::Denied,
+            reason: Some(reason),
+        };
+        let id = self.open_run(&info)?;
+        // Close immediately — denial means no child was spawned.
+        self.close_run(
+            id,
+            CloseRun {
+                duration_ms: Some(0),
+                child_exit: None,
+            },
+        )?;
+        Ok(id)
+    }
+
     /// Total number of rows. Used in tests across crates; hidden from rustdoc.
     #[doc(hidden)]
     pub fn row_count(&self) -> Result<i64> {
@@ -292,5 +325,27 @@ mod tests {
         let parsed_av: Vec<String> = serde_json::from_str(&av).unwrap();
         assert_eq!(parsed_vn, vars);
         assert_eq!(parsed_av, argv);
+    }
+
+    #[test]
+    fn write_denial_creates_closed_denied_row() {
+        let (a, _d) = fresh_audit();
+        let argv = vec!["evil".to_string(), "--steal".to_string()];
+        let id = a
+            .write_denial("ns", "/tmp/evil", &argv, "binary not allowed")
+            .unwrap();
+        assert!(id > 0);
+        assert_eq!(a.row_count().unwrap(), 1);
+        let (outcome, reason, child_exit): (String, String, Option<i32>) = a
+            .conn
+            .query_row(
+                "SELECT outcome, reason, child_exit FROM accesses WHERE id = ?1",
+                params![id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(outcome, "denied");
+        assert_eq!(reason, "binary not allowed");
+        assert_eq!(child_exit, None);
     }
 }

@@ -14,6 +14,9 @@ pub enum Error {
     #[error("invalid input: {0}")]
     Invalid(String),
 
+    #[error("denied: {reason}")]
+    Denied { reason: String },
+
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 
@@ -57,5 +60,15 @@ mod tests {
         let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "no file");
         let e: Error = io_err.into();
         assert!(matches!(e, Error::Io(_)));
+    }
+
+    #[test]
+    fn denied_message_contains_reason() {
+        let e = Error::Denied {
+            reason: "binary not in allowed_binaries".into(),
+        };
+        let s = format!("{}", e);
+        assert!(s.contains("denied"));
+        assert!(s.contains("binary not in allowed_binaries"));
     }
 }
