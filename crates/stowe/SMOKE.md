@@ -310,3 +310,71 @@ rm -rf "$TMPDIR_M4"
   fs allowlists for the actual security gates.
 - Binary lives at `/usr/bin/sandbox-exec` on current macOS (not `/usr/sbin/`
   as some older docs say).
+
+---
+
+## M5a additions: read-only desktop UI
+
+### Launch the UI and verify the three views
+
+Prereq: have at least one namespace populated. If you don't, add one quickly:
+`"$STOWE" add demo MYKEY` (defaults to `--biometric=never`).
+
+```bash
+# 1. Build the frontend bundle.
+( cd crates/stowe/web && bun install && bun run build )
+
+# 2. Build the binary (with embedded Tauri).
+cargo build --bin stowe
+
+# 3. Launch the UI.
+"$STOWE" ui &
+```
+
+Expected:
+
+- A "Stowe" window opens (~1100x720).
+- **Sidebar** lists existing namespaces with var counts (e.g. "demo - 1 var").
+- Clicking a namespace shows its variable names (no values) in the main pane.
+- **Bottom strip** shows recent activity from the audit log, refreshing every 5 seconds.
+- Closing the window exits cleanly.
+
+### Verify polling picks up new audit rows
+
+While the UI is open, in a separate terminal:
+
+```bash
+TMPDIR_M5=$(mktemp -d)
+NS="m5demo.$(date +%s)"
+cat > "$TMPDIR_M5/stowe.toml" <<INNER
+namespace = "$NS"
+[policy]
+allow_unsigned = true
+INNER
+
+# Trigger a real audit row (allowed). Cargo is signed by Apple, so verify passes.
+cd "$TMPDIR_M5" && "$STOWE" run cargo --version 2>&1
+```
+
+Within ~5 seconds the bottom strip in the UI should show a new "allowed" row tagged with `m5demo.<ts>`.
+
+Cleanup:
+
+```bash
+sqlite3 ~/Library/Application\ Support/stowe/audit.db \
+  "DELETE FROM accesses WHERE namespace = '$NS';"
+rm -rf "$TMPDIR_M5"
+```
+
+### Notes on M5a dev-cut
+
+- **No edit flows yet.** Add/Reveal/Export/Wipe come in M5b. The note in
+  ProjectDetail directs users back to the CLI for revealing values.
+- **No real macOS icons.** Placeholder Tauri default. M6 distribution adds
+  proper iconography.
+- **No code-signed app bundle.** `cargo run --bin stowe -- ui` works for
+  dev; production `.app` build is M6.
+- **Polling, not push.** AuditFeed polls every 5 seconds. M5b will switch
+  to push events when reveal/edit flows demand finer-grained updates.
+- **macOS may prompt for Keychain access** the first time the UI loads
+  namespaces (same prompt as the M2 CLI). Click "Always Allow" once.
