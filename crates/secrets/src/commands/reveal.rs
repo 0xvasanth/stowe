@@ -26,7 +26,6 @@ mod tests {
     #[test]
     fn missing_returns_not_found() {
         let vault = InMemoryVault::new();
-        // SecretValue is not Debug, so use pattern matching instead of unwrap_err.
         let result = run(&vault, "ghost", "X");
         assert!(matches!(result, Err(Error::NotFound { .. })));
     }
