@@ -141,3 +141,50 @@ pub fn delete_secret_cmd(namespace: String, var: String) -> Result<(), String> {
     let mut vault = KeychainVault::open_default().map_err(|e| e.to_string())?;
     stowe_core::Vault::delete(&mut vault, &namespace, &var).map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub fn export_vault_cmd(
+    namespaces: Vec<String>,
+    format: String,
+    passphrase: Option<String>,
+    path: String,
+) -> Result<(), String> {
+    let format = match format.as_str() {
+        "encrypted" => stowe_core::ExportFormat::Encrypted,
+        "env" => stowe_core::ExportFormat::EnvPlain,
+        other => return Err(format!("unknown export format: {}", other)),
+    };
+    let vault = KeychainVault::open_default().map_err(|e| e.to_string())?;
+    stowe_core::export::export_to_path(
+        &vault,
+        &namespaces,
+        format,
+        passphrase.as_deref(),
+        std::path::Path::new(&path),
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[derive(Serialize)]
+pub struct WipeReportDto {
+    pub namespaces_deleted: usize,
+    pub vars_deleted: usize,
+    pub audit_rows_deleted: i64,
+}
+
+#[tauri::command]
+pub fn wipe_all_cmd(also_audit: bool) -> Result<WipeReportDto, String> {
+    let mut vault = KeychainVault::open_default().map_err(|e| e.to_string())?;
+    let audit = if also_audit {
+        Some(Audit::open_default().map_err(|e| e.to_string())?)
+    } else {
+        None
+    };
+    let report = stowe_core::wipe::wipe_all(&mut vault, audit.as_ref(), also_audit)
+        .map_err(|e| e.to_string())?;
+    Ok(WipeReportDto {
+        namespaces_deleted: report.namespaces_deleted,
+        vars_deleted: report.vars_deleted,
+        audit_rows_deleted: report.audit_rows_deleted,
+    })
+}
