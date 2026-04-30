@@ -179,8 +179,8 @@ impl Audit {
         Ok(())
     }
 
-    /// Total number of rows. Used in tests; harmless in production.
-    #[cfg(test)]
+    /// Total number of rows. Used in tests across crates; hidden from rustdoc.
+    #[doc(hidden)]
     pub fn row_count(&self) -> Result<i64> {
         let n: i64 = self
             .conn
