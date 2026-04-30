@@ -11,6 +11,7 @@ use super::commands;
 /// closes; returns `Ok(())` on clean exit.
 pub fn launch_ui() -> Result<()> {
     tauri::Builder::default()
+        .plugin(tauri_plugin_clipboard_manager::init())
         .invoke_handler(tauri::generate_handler![
             commands::list_namespaces_cmd,
             commands::list_vars_cmd,

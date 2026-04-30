@@ -24,6 +24,7 @@ core-foundation        = "0.9"
 rusqlite    = { version = "0.31", features = ["bundled"] }
 tauri        = { version = "2", features = [] }
 tauri-build  = { version = "2", features = [] }
+tauri-plugin-clipboard-manager = "2"
 tempfile    = "3"
 
 [profile.release]
