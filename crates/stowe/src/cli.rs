@@ -49,6 +49,6 @@ pub enum Command {
         argv: Vec<String>,
     },
 
-    /// Open the desktop UI. Not yet implemented (M5).
+    /// Open the desktop UI (read-only Vault view). Edit flows land in M5b.
     Ui,
 }
