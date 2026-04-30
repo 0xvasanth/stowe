@@ -4,3 +4,11 @@
 
 # Internal planning docs (specs, plans) — kept on disk, not published.
 /docs/
+
+# Tauri / Vite frontend
+crates/stowe/web/node_modules/
+crates/stowe/web/dist/
+crates/stowe/web/.vite/
+
+# Tauri build artifacts
+crates/stowe/gen/

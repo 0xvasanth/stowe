@@ -1,6 +1,8 @@
 mod binary;
 mod cli;
 mod commands;
+#[allow(dead_code)]
+mod ui;
 
 use anyhow::{anyhow, Context, Result};
 use clap::Parser;
