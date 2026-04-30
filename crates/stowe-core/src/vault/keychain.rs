@@ -2,12 +2,13 @@ use core_foundation::base::TCFType;
 use core_foundation::data::CFData;
 use core_foundation::dictionary::CFDictionary;
 use core_foundation::string::CFString;
+use security_framework::access_control::{ProtectionMode, SecAccessControl};
 use security_framework::passwords::{
     delete_generic_password, get_generic_password, set_generic_password,
 };
 use security_framework::passwords_options::{AccessControlOptions, PasswordOptions};
 use security_framework_sys::base::errSecSuccess;
-use security_framework_sys::item::kSecValueData;
+use security_framework_sys::item::{kSecAttrAccessControl, kSecValueData};
 use security_framework_sys::keychain_item::SecItemAdd;
 
 use crate::{
@@ -96,15 +97,35 @@ impl KeychainVault {
                     | AccessControlOptions::OR
                     | AccessControlOptions::DEVICE_PASSCODE;
 
-                // If an item already exists at this (service, account), the
-                // add will fail with errSecDuplicateItem. Delete first, then
-                // re-add with the new ACL.
+                // Build SecAccessControl with explicit protection mode.
+                // AccessibleWhenPasscodeSetThisDeviceOnly: item is not
+                // eligible for iCloud Keychain sync AND requires a device
+                // passcode to be set (which is the precondition for the
+                // DEVICE_PASSCODE fallback in `flags` to be meaningful).
+                let access_control = SecAccessControl::create_with_protection(
+                    Some(ProtectionMode::AccessibleWhenPasscodeSetThisDeviceOnly),
+                    flags.bits(),
+                )
+                .map_err(|e| Error::Keychain(format!("creating access control: {}", e)))?;
+
+                // Delete-then-add to handle the "overwrite with new ACL" case.
+                // TOCTOU note: if delete succeeds but SecItemAdd below fails
+                // (e.g. a racing process), the secret is lost for this call.
+                // The Err return propagates; deferred to a post-M3 follow-up.
                 let _ = delete_generic_password(&service, var);
 
                 let mut opts = PasswordOptions::new_generic_password(&service, var);
-                opts.set_access_control_options(flags);
-
-                // Append the secret value to the query dictionary.
+                // Append kSecAttrAccessControl with our protection-mode-bearing
+                // SecAccessControl (replaces set_access_control_options which
+                // hardcodes a null protection).
+                opts.query.push((
+                    unsafe { CFString::wrap_under_get_rule(kSecAttrAccessControl) },
+                    access_control.into_CFType(),
+                ));
+                // Append the secret value. NOTE: CF allocates a non-zeroized
+                // copy of these bytes on the heap; CF does not wipe on drop.
+                // This matches set_generic_password's behavior; revisit if a
+                // future zeroize-after-SecItemAdd pass is warranted.
                 opts.query.push((
                     unsafe { CFString::wrap_under_get_rule(kSecValueData) },
                     CFData::from_buffer(value.expose()).into_CFType(),
@@ -307,6 +328,88 @@ mod tests {
         let got = v.get(&ns, "BIO_NEVER").expect("get");
         assert_eq!(got.expose(), b"plain");
         cleanup(&mut v, &ns, &["BIO_NEVER"]);
+    }
+
+    /// Verify that biometric=Always actually persists an ACL on the item.
+    /// This uses `SecItemCopyMatching` with `kSecReturnAttributes: true`
+    /// and `kSecReturnData: false` — querying attributes does NOT trigger
+    /// the ACL evaluation, so this won't prompt for Touch ID.
+    #[test]
+    #[ignore = "writes to real Keychain; run with --ignored"]
+    fn set_with_biometric_always_persists_acl() {
+        use core_foundation::base::TCFType;
+        use core_foundation::boolean::CFBoolean;
+        use core_foundation::dictionary::CFDictionary;
+        use core_foundation::number::CFNumber;
+        use core_foundation::string::CFString;
+        use security_framework_sys::item::{
+            kSecAttrAccessControl, kSecAttrAccount, kSecAttrService, kSecClass,
+            kSecClassGenericPassword, kSecMatchLimit, kSecReturnAttributes,
+        };
+        use security_framework_sys::keychain_item::SecItemCopyMatching;
+
+        let (mut v, _d) = fresh_vault();
+        let ns = unique_namespace();
+
+        v.set_with_biometric(
+            &ns,
+            "BIO_ALWAYS",
+            SecretValue::from_string("doesnt-matter".into()),
+            crate::manifest::BiometricMode::Always,
+        )
+        .expect("set_with_biometric Always");
+
+        // Build a query: class=GenericPassword, service=stowe.<ns>, account=BIO_ALWAYS,
+        // returnAttributes=true, matchLimit=1. NO returnData, so no ACL prompt.
+        let service = format!("stowe.{}", ns);
+        let pairs: Vec<(CFString, core_foundation::base::CFType)> = vec![
+            (
+                unsafe { CFString::wrap_under_get_rule(kSecClass) },
+                unsafe { CFString::wrap_under_get_rule(kSecClassGenericPassword).into_CFType() },
+            ),
+            (
+                unsafe { CFString::wrap_under_get_rule(kSecAttrService) },
+                CFString::new(&service).into_CFType(),
+            ),
+            (
+                unsafe { CFString::wrap_under_get_rule(kSecAttrAccount) },
+                CFString::new("BIO_ALWAYS").into_CFType(),
+            ),
+            (
+                unsafe { CFString::wrap_under_get_rule(kSecMatchLimit) },
+                CFNumber::from(1i64).into_CFType(),
+            ),
+            (
+                unsafe { CFString::wrap_under_get_rule(kSecReturnAttributes) },
+                CFBoolean::true_value().into_CFType(),
+            ),
+        ];
+        let query = CFDictionary::from_CFType_pairs(&pairs);
+        let mut result: core_foundation::base::CFTypeRef = std::ptr::null();
+        let status =
+            unsafe { SecItemCopyMatching(query.as_concrete_TypeRef().cast(), &mut result) };
+        assert_eq!(
+            status, 0,
+            "SecItemCopyMatching should succeed for an item we just created; status={}",
+            status
+        );
+        assert!(!result.is_null(), "result dict should not be null");
+
+        // The returned CFDictionary should contain a kSecAttrAccessControl key,
+        // proving the ACL was persisted on the item.
+        let result_dict: CFDictionary<
+            core_foundation::base::CFType,
+            core_foundation::base::CFType,
+        > = unsafe { CFDictionary::wrap_under_create_rule(result.cast()) };
+        let access_control_key: CFString =
+            unsafe { CFString::wrap_under_get_rule(kSecAttrAccessControl) };
+        assert!(
+            result_dict.find(access_control_key.into_CFType()).is_some(),
+            "expected kSecAttrAccessControl on item, got {} keys",
+            result_dict.len()
+        );
+
+        cleanup(&mut v, &ns, &["BIO_ALWAYS"]);
     }
 
     #[test]
