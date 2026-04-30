@@ -17,9 +17,14 @@ fn main() -> Result<()> {
                 .interact()
                 .context("reading value")?;
             let mut vault = KeychainVault::open_default().context("opening Keychain vault")?;
-            commands::add::run(&mut vault, &namespace, &var, SecretValue::from_string(value))
-                .with_context(|| format!("storing secrets.{}/{}", namespace, var))?;
-            println!("✓ Stored secrets.{}/{}", namespace, var);
+            commands::add::run(
+                &mut vault,
+                &namespace,
+                &var,
+                SecretValue::from_string(value),
+            )
+            .with_context(|| format!("storing secrets.{}/{}", namespace, var))?;
+            println!("stored secrets.{}/{}", namespace, var);
         }
 
         Command::List { namespace } => {

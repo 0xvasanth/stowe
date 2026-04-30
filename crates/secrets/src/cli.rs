@@ -30,7 +30,9 @@ pub enum Command {
 
     /// Print a secret to stdout. Use `secrets reveal <ns> <var>`.
     Reveal {
+        /// Namespace (e.g. project name).
         namespace: String,
+        /// Variable name (e.g. ANTHROPIC_API_KEY).
         var: String,
     },
 
