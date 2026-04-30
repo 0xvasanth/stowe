@@ -29,7 +29,10 @@ mod tests {
 
     #[test]
     fn not_found_message_contains_identifiers() {
-        let e = Error::NotFound { namespace: "cognis".into(), var: "API_KEY".into() };
+        let e = Error::NotFound {
+            namespace: "cognis".into(),
+            var: "API_KEY".into(),
+        };
         let s = format!("{}", e);
         assert!(s.contains("cognis"), "missing namespace in: {}", s);
         assert!(s.contains("API_KEY"), "missing var in: {}", s);

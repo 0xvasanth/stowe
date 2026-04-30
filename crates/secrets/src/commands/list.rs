@@ -48,10 +48,7 @@ mod tests {
         assert_eq!(summaries.len(), 2);
         let cognis = summaries.iter().find(|s| s.namespace == "cognis").unwrap();
         assert_eq!(cognis.var_count, 2);
-        let shopify = summaries
-            .iter()
-            .find(|s| s.namespace == "shopify")
-            .unwrap();
+        let shopify = summaries.iter().find(|s| s.namespace == "shopify").unwrap();
         assert_eq!(shopify.var_count, 1);
     }
 
