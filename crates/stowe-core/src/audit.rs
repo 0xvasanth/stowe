@@ -212,6 +212,16 @@ impl Audit {
         Ok(id)
     }
 
+    /// Delete every row in the audit log. Returns the number of rows deleted.
+    /// Used by `wipe::wipe_all` when `also_audit` is true.
+    pub fn truncate(&self) -> Result<i64> {
+        let n = self.row_count()?;
+        self.conn
+            .execute("DELETE FROM accesses", [])
+            .map_err(|e| Error::Database(format!("truncating accesses: {}", e)))?;
+        Ok(n)
+    }
+
     /// Total number of rows. Used in tests across crates; hidden from rustdoc.
     #[doc(hidden)]
     pub fn row_count(&self) -> Result<i64> {
