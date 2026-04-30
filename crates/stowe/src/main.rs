@@ -1,7 +1,6 @@
 mod binary;
 mod cli;
 mod commands;
-#[allow(dead_code)]
 mod ui;
 
 use anyhow::{anyhow, Context, Result};
@@ -131,8 +130,7 @@ fn main() -> Result<()> {
         }
 
         Command::Ui => {
-            eprintln!("`stowe ui` not yet implemented (planned for M5).");
-            std::process::exit(2);
+            ui::launch::launch_ui().context("launching desktop UI")?;
         }
     }
 
