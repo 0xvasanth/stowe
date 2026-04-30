@@ -38,6 +38,13 @@ pub fn verify(path: &Path) -> Result<CodesignInfo> {
 
     // The "code object is not signed at all" line is the unsigned signal.
     // It can also report "is not signed at all" on directories or zero-length files.
+    //
+    // Security note: any non-zero exit (permission denied reading the
+    // binary, codesign couldn't open the file, etc.) is also folded into
+    // `signed: false`. Combined with `policy.allow_unsigned = true`, this
+    // means an unreadable binary passes the gate. Acceptable for v0.3
+    // because callers default to `allow_unsigned = false`; revisit if a
+    // future caller relies on `signed: false` to mean "definitely unsigned".
     if stderr.contains("not signed at all") || !output.status.success() {
         return Ok(CodesignInfo {
             signed: false,
