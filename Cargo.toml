@@ -22,6 +22,7 @@ security-framework     = { version = "2.11", features = ["OSX_10_13"] }
 security-framework-sys = "2.17"
 core-foundation        = "0.9"
 rusqlite    = { version = "0.31", features = ["bundled"] }
+tempfile    = "3"
 
 [profile.release]
 strip = true

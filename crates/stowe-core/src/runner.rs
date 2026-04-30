@@ -29,6 +29,9 @@ pub struct RunnerConfig {
     /// Secret env vars to inject into the child. Order is preserved; later
     /// entries overwrite earlier ones if names collide.
     pub secret_env: Vec<(String, SecretValue)>,
+    /// Optional sandbox-exec profile text. When `Some(...)`, runner writes
+    /// the profile to a 0600 tempfile and spawns `sandbox-exec -f <path>`.
+    pub sandbox_profile: Option<String>,
 }
 
 /// Result of a child process run.
@@ -46,8 +49,36 @@ pub struct ChildOutcome {
 pub fn run(mut config: RunnerConfig) -> Result<ChildOutcome> {
     let start = Instant::now();
 
-    let mut cmd = Command::new(&config.binary_path);
-    cmd.args(&config.args);
+    // Build the command. If a sandbox profile is set, write it to a 0600
+    // tempfile and spawn `sandbox-exec -f <path>` instead. The tempfile is
+    // held in `_profile_file` so its drop removes it after the child exits.
+    let _profile_file: Option<tempfile::NamedTempFile>;
+    let mut cmd = if let Some(profile_text) = &config.sandbox_profile {
+        use std::io::Write;
+        use std::os::unix::fs::PermissionsExt;
+        let mut tmp = tempfile::Builder::new()
+            .prefix("stowe-sandbox-")
+            .suffix(".sb")
+            .tempfile()
+            .map_err(crate::error::Error::Io)?;
+        tmp.as_file_mut()
+            .write_all(profile_text.as_bytes())
+            .map_err(crate::error::Error::Io)?;
+        tmp.as_file()
+            .set_permissions(std::fs::Permissions::from_mode(0o600))
+            .map_err(crate::error::Error::Io)?;
+        let mut sandbox_cmd = Command::new("/usr/bin/sandbox-exec");
+        sandbox_cmd.arg("-f").arg(tmp.path());
+        sandbox_cmd.arg(&config.binary_path);
+        sandbox_cmd.args(&config.args);
+        _profile_file = Some(tmp);
+        sandbox_cmd
+    } else {
+        _profile_file = None;
+        let mut plain = Command::new(&config.binary_path);
+        plain.args(&config.args);
+        plain
+    };
 
     // Move secret bytes into a Zeroizing vector while we materialize the env
     // entries Command needs. Each value is wrapped so its heap bytes are
@@ -104,6 +135,7 @@ mod tests {
             binary_path: "/bin/sh".into(),
             args: vec!["-c".into(), "exit 0".into()],
             secret_env: vec![("FOO".into(), sv("bar"))],
+            sandbox_profile: None,
         })
         .unwrap();
         assert_eq!(outcome.exit_code, Some(0));
@@ -116,6 +148,7 @@ mod tests {
             binary_path: "/bin/sh".into(),
             args: vec!["-c".into(), "exit 42".into()],
             secret_env: vec![],
+            sandbox_profile: None,
         })
         .unwrap();
         assert_eq!(outcome.exit_code, Some(42));
@@ -132,6 +165,7 @@ mod tests {
                 "[ \"$STOWE_TEST\" = \"expected-value\" ]".into(),
             ],
             secret_env: vec![("STOWE_TEST".into(), sv("expected-value"))],
+            sandbox_profile: None,
         })
         .unwrap();
         assert_eq!(outcome.exit_code, Some(0));
@@ -143,6 +177,7 @@ mod tests {
             binary_path: "/nonexistent/binary/path".into(),
             args: vec![],
             secret_env: vec![],
+            sandbox_profile: None,
         });
         assert!(matches!(result, Err(crate::error::Error::Io(_))));
     }
@@ -155,7 +190,75 @@ mod tests {
             binary_path: "/bin/sh".into(),
             args: vec!["-c".into(), "exit 0".into()],
             secret_env: vec![("BAD".into(), bad)],
+            sandbox_profile: None,
         });
         assert!(matches!(result, Err(crate::error::Error::Invalid(_))));
+    }
+
+    #[test]
+    fn no_sandbox_profile_spawns_directly() {
+        let outcome = run(RunnerConfig {
+            binary_path: "/bin/sh".into(),
+            args: vec!["-c".into(), "exit 0".into()],
+            secret_env: vec![],
+            sandbox_profile: None,
+        })
+        .unwrap();
+        assert_eq!(outcome.exit_code, Some(0));
+    }
+
+    #[test]
+    fn sandbox_profile_runs_via_sandbox_exec() {
+        let profile = "(version 1)\n\
+(deny default)\n\
+(allow process-fork)\n\
+(allow process-exec)\n\
+(allow signal (target self))\n\
+(allow mach-lookup)\n\
+(allow sysctl-read)\n\
+(allow file-read*)\n\
+(allow file-write*\n\
+  (subpath \"/private/tmp\")\n\
+  (subpath \"/private/var/folders\"))\n"
+            .to_string();
+        let outcome = run(RunnerConfig {
+            binary_path: "/bin/sh".into(),
+            args: vec!["-c".into(), "exit 0".into()],
+            secret_env: vec![],
+            sandbox_profile: Some(profile),
+        })
+        .unwrap();
+        assert_eq!(outcome.exit_code, Some(0));
+    }
+
+    #[test]
+    fn sandbox_blocks_disallowed_file_write() {
+        let profile = "(version 1)\n\
+(deny default)\n\
+(allow process-fork)\n\
+(allow process-exec)\n\
+(allow signal (target self))\n\
+(allow mach-lookup)\n\
+(allow sysctl-read)\n\
+(allow file-read*)\n\
+(allow file-write*\n\
+  (subpath \"/private/tmp\")\n\
+  (subpath \"/private/var/folders\"))\n"
+            .to_string();
+        let outcome = run(RunnerConfig {
+            binary_path: "/bin/sh".into(),
+            args: vec![
+                "-c".into(),
+                "! (echo blocked > /private/etc/stowe-test 2>/dev/null)".into(),
+            ],
+            secret_env: vec![],
+            sandbox_profile: Some(profile),
+        })
+        .unwrap();
+        assert_eq!(
+            outcome.exit_code,
+            Some(0),
+            "sandbox should block writes to /private/etc"
+        );
     }
 }

@@ -62,6 +62,7 @@ pub fn run(
         binary_path: binary.path.clone(),
         args: binary.argv.clone(),
         secret_env,
+        sandbox_profile: None,
     };
     let outcome = stowe_core::runner::run(cfg);
 
