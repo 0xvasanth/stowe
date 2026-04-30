@@ -75,6 +75,13 @@ impl KeychainVault {
     /// `SecAccessControl` requiring biometric or device-passcode auth on
     /// each read. When `mode == BiometricMode::Never`, this is equivalent
     /// to plain `set`.
+    ///
+    /// **Entitlement requirement (dev-cut limitation):** `Always` mode
+    /// requires the calling binary to be signed with `keychain-access-groups`
+    /// entitlements. Calls from unsigned binaries (e.g. `cargo run`,
+    /// `cargo test`) fail with `errSecMissingEntitlement` (code -34018).
+    /// This is fixed once M6 ships proper code signing; until then, prefer
+    /// `BiometricMode::Never` for development.
     pub fn set_with_biometric(
         &mut self,
         namespace: &str,
@@ -334,8 +341,14 @@ mod tests {
     /// This uses `SecItemCopyMatching` with `kSecReturnAttributes: true`
     /// and `kSecReturnData: false` — querying attributes does NOT trigger
     /// the ACL evaluation, so this won't prompt for Touch ID.
+    ///
+    /// Currently fails under `cargo test --ignored` with
+    /// `errSecMissingEntitlement` (-34018) because biometric ACL items
+    /// require `keychain-access-groups` entitlements that ad-hoc-signed
+    /// `cargo test` binaries lack. Re-enable verification once M6 ships
+    /// proper code signing.
     #[test]
-    #[ignore = "writes to real Keychain; run with --ignored"]
+    #[ignore = "requires signed binary (M6); biometric ACL needs keychain-access-groups entitlement"]
     fn set_with_biometric_always_persists_acl() {
         use core_foundation::base::TCFType;
         use core_foundation::boolean::CFBoolean;
