@@ -7,3 +7,6 @@ pub use error::{Error, Result};
 pub use index::Index;
 pub use secret_value::SecretValue;
 pub use vault::{InMemoryVault, Vault};
+
+#[cfg(target_os = "macos")]
+pub use vault::KeychainVault;
