@@ -160,6 +160,7 @@ mod tests {
             biometric: BiometricMode::Always,
             allowed_binaries: allowed.iter().map(|s| s.to_string()).collect(),
             allow_unsigned,
+            sandbox: stowe_core::SandboxPolicy::default(),
         }
     }
 

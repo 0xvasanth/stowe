@@ -25,6 +25,26 @@ pub enum BiometricMode {
     Never,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SandboxPolicy {
+    /// If true, `stowe run` wraps the child via `sandbox-exec`.
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Hostnames (with optional ports) the child may connect to.
+    /// Examples: "registry.npmjs.org", "github.com:443".
+    /// Validated against `^[a-zA-Z0-9.\-*:]+$`.
+    #[serde(default)]
+    pub network_allow: Vec<String>,
+
+    /// Paths the child may write to, beyond project root + system tempdirs.
+    /// `~/...` is expanded against the user's home.
+    /// Validated against `^[a-zA-Z0-9._/~-]+$`.
+    #[serde(default)]
+    pub fs_write_allow: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Policy {
@@ -38,6 +58,9 @@ pub struct Policy {
     /// If true, `stowe run` accepts unsigned child binaries. Default: false.
     #[serde(default)]
     pub allow_unsigned: bool,
+
+    #[serde(default)]
+    pub sandbox: SandboxPolicy,
 }
 
 impl Default for Policy {
@@ -46,6 +69,7 @@ impl Default for Policy {
             biometric: BiometricMode::Always,
             allowed_binaries: Vec::new(),
             allow_unsigned: false,
+            sandbox: Default::default(),
         }
     }
 }
@@ -296,6 +320,56 @@ namespace = "cognis"
 
 [policy]
 biometric = "always"
+unknown_field = "value"
+"#;
+        let dir = tempdir().unwrap();
+        write_manifest(dir.path(), body);
+        let err = Manifest::load(dir.path().join(MANIFEST_FILENAME)).unwrap_err();
+        assert!(matches!(err, Error::Toml(_)));
+    }
+
+    #[test]
+    fn parses_manifest_with_sandbox_policy() {
+        let body = r#"
+namespace = "cognis"
+
+[policy.sandbox]
+enabled = true
+network_allow = ["registry.npmjs.org", "github.com:443"]
+fs_write_allow = ["~/.npm", "~/Library/Caches"]
+"#;
+        let dir = tempdir().unwrap();
+        write_manifest(dir.path(), body);
+        let m = Manifest::load(dir.path().join(MANIFEST_FILENAME)).unwrap();
+        assert!(m.policy.sandbox.enabled);
+        assert_eq!(
+            m.policy.sandbox.network_allow,
+            vec!["registry.npmjs.org", "github.com:443"]
+        );
+        assert_eq!(
+            m.policy.sandbox.fs_write_allow,
+            vec!["~/.npm", "~/Library/Caches"]
+        );
+    }
+
+    #[test]
+    fn manifest_without_sandbox_section_uses_disabled_default() {
+        let body = "namespace = \"cognis\"\n";
+        let dir = tempdir().unwrap();
+        write_manifest(dir.path(), body);
+        let m = Manifest::load(dir.path().join(MANIFEST_FILENAME)).unwrap();
+        assert!(!m.policy.sandbox.enabled);
+        assert!(m.policy.sandbox.network_allow.is_empty());
+        assert!(m.policy.sandbox.fs_write_allow.is_empty());
+    }
+
+    #[test]
+    fn unknown_sandbox_field_rejected() {
+        let body = r#"
+namespace = "cognis"
+
+[policy.sandbox]
+enabled = true
 unknown_field = "value"
 "#;
         let dir = tempdir().unwrap();
