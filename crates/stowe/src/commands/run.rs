@@ -58,11 +58,32 @@ pub fn run(
     };
     let audit_id = audit.open_run(&open_info)?;
 
+    // If sandbox is enabled in the manifest, generate the profile from
+    // SandboxPolicy + project root + home dir. The project root is the
+    // directory containing the manifest.
+    let sandbox_profile = if manifest.policy.sandbox.enabled {
+        let project_root = manifest_path
+            .parent()
+            .ok_or_else(|| {
+                stowe_core::Error::Invalid("manifest_path has no parent directory".into())
+            })?
+            .to_path_buf();
+        let home = dirs::home_dir()
+            .ok_or_else(|| stowe_core::Error::Invalid("could not resolve home dir".into()))?;
+        Some(stowe_core::sandbox::generate_profile(
+            &manifest.policy.sandbox,
+            &project_root,
+            &home,
+        )?)
+    } else {
+        None
+    };
+
     let cfg = RunnerConfig {
         binary_path: binary.path.clone(),
         args: binary.argv.clone(),
         secret_env,
-        sandbox_profile: None,
+        sandbox_profile,
     };
     let outcome = stowe_core::runner::run(cfg);
 
@@ -209,5 +230,33 @@ mod tests {
         assert_eq!(outcome.exit_code, Some(7));
         let row_count = audit.row_count().unwrap();
         assert_eq!(row_count, 1);
+    }
+
+    #[test]
+    fn enabled_sandbox_runs_child_via_sandbox_exec() {
+        use stowe_core::SandboxPolicy;
+
+        let vault = populated_vault();
+        let (audit, _d) = fresh_audit();
+        let mut manifest = make_manifest(&[("PRESENT", true)]);
+        manifest.policy.sandbox = SandboxPolicy {
+            enabled: true,
+            network_allow: vec![],
+            fs_write_allow: vec![],
+        };
+
+        let binary = ResolvedBinary {
+            path: "/bin/sh".into(),
+            argv: vec!["-c".into(), "exit 0".into()],
+        };
+
+        // Use a tempdir-backed manifest_path so generate_profile gets a real
+        // absolute project root.
+        let dir = tempdir().unwrap();
+        let manifest_path = dir.path().join("stowe.toml");
+        std::fs::write(&manifest_path, "namespace = \"ns\"\n").unwrap();
+
+        let outcome = run(&vault, &audit, &manifest, &binary, &manifest_path).unwrap();
+        assert_eq!(outcome.exit_code, Some(0));
     }
 }
