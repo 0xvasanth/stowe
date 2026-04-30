@@ -59,7 +59,9 @@ fn main() -> Result<()> {
                 .with_context(|| format!("reading secrets.{}/{}", namespace, var))?;
             // Write raw bytes to stdout; safe for binary values.
             use std::io::Write;
-            std::io::stdout().write_all(value.expose())?;
+            let mut out = std::io::stdout().lock();
+            out.write_all(value.expose())?;
+            out.flush()?;
         }
 
         Command::Ui => {
