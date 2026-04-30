@@ -15,6 +15,41 @@ pub struct VarSpec {
     pub description: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum BiometricMode {
+    /// Touch ID required for every read of this item.
+    #[default]
+    Always,
+    /// No biometric guard. Item readable without prompting.
+    Never,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Policy {
+    #[serde(default)]
+    pub biometric: BiometricMode,
+
+    /// Basename allowlist for `stowe run`. Empty list = no restriction.
+    #[serde(default)]
+    pub allowed_binaries: Vec<String>,
+
+    /// If true, `stowe run` accepts unsigned child binaries. Default: false.
+    #[serde(default)]
+    pub allow_unsigned: bool,
+}
+
+impl Default for Policy {
+    fn default() -> Self {
+        Self {
+            biometric: BiometricMode::Always,
+            allowed_binaries: Vec::new(),
+            allow_unsigned: false,
+        }
+    }
+}
+
 /// Per-project manifest. Schema is closed (`deny_unknown_fields`) so future
 /// additions (policy, etc.) are explicit version bumps rather than silent.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -24,6 +59,9 @@ pub struct Manifest {
 
     #[serde(default)]
     pub vars: BTreeMap<String, VarSpec>,
+
+    #[serde(default)]
+    pub policy: Policy,
 }
 
 impl Manifest {
@@ -203,5 +241,66 @@ C = { required = true }
             let err = Manifest::find_from_or_err(&nested).unwrap_err();
             assert!(matches!(err, Error::ManifestNotFound { .. }));
         }
+    }
+
+    #[test]
+    fn parses_manifest_with_policy_section() {
+        let body = r#"
+namespace = "cognis"
+
+[vars]
+KEY = { required = true }
+
+[policy]
+biometric = "always"
+allowed_binaries = ["cargo", "node", "npm"]
+allow_unsigned = false
+"#;
+        let dir = tempdir().unwrap();
+        write_manifest(dir.path(), body);
+        let m = Manifest::load(dir.path().join(MANIFEST_FILENAME)).unwrap();
+        assert_eq!(m.policy.biometric, BiometricMode::Always);
+        assert_eq!(m.policy.allowed_binaries, vec!["cargo", "node", "npm"]);
+        assert!(!m.policy.allow_unsigned);
+    }
+
+    #[test]
+    fn manifest_without_policy_uses_defaults() {
+        let body = "namespace = \"cognis\"\n";
+        let dir = tempdir().unwrap();
+        write_manifest(dir.path(), body);
+        let m = Manifest::load(dir.path().join(MANIFEST_FILENAME)).unwrap();
+        assert_eq!(m.policy.biometric, BiometricMode::Always);
+        assert!(m.policy.allowed_binaries.is_empty());
+        assert!(!m.policy.allow_unsigned);
+    }
+
+    #[test]
+    fn biometric_mode_parses_lowercase() {
+        let body = r#"
+namespace = "cognis"
+
+[policy]
+biometric = "never"
+"#;
+        let dir = tempdir().unwrap();
+        write_manifest(dir.path(), body);
+        let m = Manifest::load(dir.path().join(MANIFEST_FILENAME)).unwrap();
+        assert_eq!(m.policy.biometric, BiometricMode::Never);
+    }
+
+    #[test]
+    fn unknown_policy_field_rejected() {
+        let body = r#"
+namespace = "cognis"
+
+[policy]
+biometric = "always"
+unknown_field = "value"
+"#;
+        let dir = tempdir().unwrap();
+        write_manifest(dir.path(), body);
+        let err = Manifest::load(dir.path().join(MANIFEST_FILENAME)).unwrap_err();
+        assert!(matches!(err, Error::Toml(_)));
     }
 }

@@ -117,6 +117,7 @@ mod tests {
         Manifest {
             namespace: "ns".into(),
             vars,
+            policy: Default::default(),
         }
     }
 
