@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/main.tsx"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/main.tsx","./src/tauri.ts","./src/components/auditfeed.tsx","./src/components/projectdetail.tsx","./src/components/vaultlist.tsx"],"version":"5.9.3"}
