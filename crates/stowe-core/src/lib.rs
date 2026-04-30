@@ -4,6 +4,7 @@ pub mod error;
 pub mod index;
 pub mod manifest;
 pub mod runner;
+pub mod sandbox;
 pub mod secret_value;
 pub mod vault;
 
