@@ -1,6 +1,14 @@
+use core_foundation::base::TCFType;
+use core_foundation::data::CFData;
+use core_foundation::dictionary::CFDictionary;
+use core_foundation::string::CFString;
 use security_framework::passwords::{
     delete_generic_password, get_generic_password, set_generic_password,
 };
+use security_framework::passwords_options::{AccessControlOptions, PasswordOptions};
+use security_framework_sys::base::errSecSuccess;
+use security_framework_sys::item::kSecValueData;
+use security_framework_sys::keychain_item::SecItemAdd;
 
 use crate::{
     error::{Error, Result},
@@ -58,6 +66,63 @@ impl KeychainVault {
                 )));
             }
         }
+        Ok(())
+    }
+
+    /// Create a Keychain item with the given biometric policy. When
+    /// `mode == BiometricMode::Always`, the item is created with
+    /// `SecAccessControl` requiring biometric or device-passcode auth on
+    /// each read. When `mode == BiometricMode::Never`, this is equivalent
+    /// to plain `set`.
+    pub fn set_with_biometric(
+        &mut self,
+        namespace: &str,
+        var: &str,
+        value: SecretValue,
+        mode: crate::manifest::BiometricMode,
+    ) -> Result<()> {
+        Self::validate_name("namespace", namespace)?;
+        Self::validate_name("var", var)?;
+
+        match mode {
+            crate::manifest::BiometricMode::Never => {
+                let service = Self::service(namespace);
+                set_generic_password(&service, var, value.expose())
+                    .map_err(|e| Self::map_sf_err(e, namespace, var))?;
+            }
+            crate::manifest::BiometricMode::Always => {
+                let service = Self::service(namespace);
+                let flags = AccessControlOptions::BIOMETRY_ANY
+                    | AccessControlOptions::OR
+                    | AccessControlOptions::DEVICE_PASSCODE;
+
+                // If an item already exists at this (service, account), the
+                // add will fail with errSecDuplicateItem. Delete first, then
+                // re-add with the new ACL.
+                let _ = delete_generic_password(&service, var);
+
+                let mut opts = PasswordOptions::new_generic_password(&service, var);
+                opts.set_access_control_options(flags);
+
+                // Append the secret value to the query dictionary.
+                opts.query.push((
+                    unsafe { CFString::wrap_under_get_rule(kSecValueData) },
+                    CFData::from_buffer(value.expose()).into_CFType(),
+                ));
+                let dict = CFDictionary::from_CFType_pairs(&opts.query);
+                let status =
+                    unsafe { SecItemAdd(dict.as_concrete_TypeRef().cast(), std::ptr::null_mut()) };
+                if status != errSecSuccess {
+                    return Err(Self::map_sf_err(
+                        security_framework::base::Error::from_code(status),
+                        namespace,
+                        var,
+                    ));
+                }
+            }
+        }
+        self.index.add(namespace, var);
+        self.index.save()?;
         Ok(())
     }
 
@@ -225,6 +290,23 @@ mod tests {
         assert!(matches!(err1, Err(Error::Invalid(_))));
         let err2 = v.set("ns", "", SecretValue::from_string("v".into()));
         assert!(matches!(err2, Err(Error::Invalid(_))));
+    }
+
+    #[test]
+    #[ignore = "writes to real Keychain; run with --ignored"]
+    fn set_with_biometric_never_round_trips() {
+        let (mut v, _d) = fresh_vault();
+        let ns = unique_namespace();
+        v.set_with_biometric(
+            &ns,
+            "BIO_NEVER",
+            SecretValue::from_string("plain".into()),
+            crate::manifest::BiometricMode::Never,
+        )
+        .expect("set_with_biometric Never");
+        let got = v.get(&ns, "BIO_NEVER").expect("get");
+        assert_eq!(got.expose(), b"plain");
+        cleanup(&mut v, &ns, &["BIO_NEVER"]);
     }
 
     #[test]
