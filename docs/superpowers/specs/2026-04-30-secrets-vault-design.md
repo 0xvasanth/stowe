@@ -1,5 +1,7 @@
 # `secrets` — local-first secrets vault for macOS
 
+> **Note (post-M1):** Project renamed to `stowe`. See commit `f8a82b8`. This document preserves the original wording for historical reference; M2+ docs use `stowe`.
+
 **Status:** Design (brainstorm complete, awaiting user spec review)
 **Date:** 2026-04-30
 **Working directory:** `/Users/vasanth/Developer/tryouts/secret` (empty git repo)

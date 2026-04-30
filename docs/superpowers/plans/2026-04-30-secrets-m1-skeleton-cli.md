@@ -1,5 +1,7 @@
 # Secrets M1 — Skeleton & Minimal CLI Implementation Plan
 
+> **Note (post-M1):** Project renamed to `stowe`. See commit `f8a82b8`. This plan preserves the original `secrets`/`secrets-core` naming as it was used during M1 implementation; the `m1` tag points at the pre-rename code. M2+ plans use `stowe`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship a Rust CLI binary `secrets` that stores/retrieves/lists named secrets in the macOS Keychain, with a tested core library backed by both a real Keychain implementation and an in-memory fake.
