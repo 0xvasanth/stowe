@@ -1,7 +1,7 @@
 mod cli;
 mod commands;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use clap::Parser;
 use cli::{Cli, Command};
 use dialoguer::Password;
@@ -9,6 +9,29 @@ use stowe_core::{Audit, KeychainVault, Manifest, SecretValue};
 
 fn open_vault() -> Result<KeychainVault> {
     KeychainVault::open_default().context("opening Keychain vault")
+}
+
+fn resolve_binary(name: &str) -> Result<String> {
+    // If the user passed an absolute or relative path containing /, use it directly.
+    if name.contains('/') {
+        return Ok(name.to_string());
+    }
+    // Otherwise resolve via /usr/bin/which (built-in macOS binary).
+    let output = std::process::Command::new("/usr/bin/which")
+        .arg(name)
+        .output()
+        .with_context(|| format!("resolving binary `{}` via /usr/bin/which", name))?;
+    if !output.status.success() {
+        return Err(anyhow!("binary not found in PATH: {}", name));
+    }
+    let resolved = String::from_utf8(output.stdout)
+        .with_context(|| format!("non-UTF-8 path for `{}`", name))?
+        .trim()
+        .to_string();
+    if resolved.is_empty() {
+        return Err(anyhow!("which returned empty path for {}", name));
+    }
+    Ok(resolved)
 }
 
 fn main() -> Result<()> {
@@ -68,25 +91,32 @@ fn main() -> Result<()> {
             out.flush()?;
         }
 
-        Command::Run {
-            manifest: manifest_path,
-            binary,
-            args,
-        } => {
-            let path = std::path::PathBuf::from(&manifest_path);
-            let manifest = Manifest::load(&path)
-                .with_context(|| format!("loading manifest '{}'", manifest_path))?;
+        Command::Run { argv } => {
+            if argv.is_empty() {
+                return Err(anyhow!("missing command after `stowe run`"));
+            }
+            let cwd = std::env::current_dir().context("getting cwd")?;
+            let (manifest_path, manifest) = Manifest::find_from_or_err(&cwd)
+                .with_context(|| format!("looking for stowe.toml from {}", cwd.display()))?;
+            let bin_name = argv[0].clone();
+            let resolved = resolve_binary(&bin_name)?;
+            let rest_args = argv[1..].to_vec();
             let vault = open_vault()?;
             let audit = Audit::open_default().context("opening audit log")?;
             let binary_info = commands::run::ResolvedBinary {
-                path: binary,
-                argv: args,
+                path: resolved,
+                argv: rest_args,
             };
-            let outcome = commands::run::run(&vault, &audit, &manifest, &binary_info, &path)
-                .context("running child process")?;
-            if let Some(code) = outcome.exit_code {
-                std::process::exit(code);
-            }
+            let outcome =
+                commands::run::run(&vault, &audit, &manifest, &binary_info, &manifest_path)
+                    .with_context(|| {
+                        format!(
+                            "running `{}` for namespace `{}`",
+                            bin_name, manifest.namespace
+                        )
+                    })?;
+            // Signal-killed (exit_code = None) maps to exit 1.
+            std::process::exit(outcome.exit_code.unwrap_or(1));
         }
 
         Command::Ui => {

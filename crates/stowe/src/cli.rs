@@ -36,15 +36,13 @@ pub enum Command {
         var: String,
     },
 
-    /// Run a command with secrets injected as environment variables.
+    /// Run a child command with secrets injected as env vars.
+    /// Reads `stowe.toml` from the current dir or any ancestor.
+    /// Usage: `stowe run <cmd> [args...]` or `stowe run -- <cmd> [args...]`.
     Run {
-        /// Path to the manifest file (default: stowe.toml).
-        #[arg(short, long, default_value = "stowe.toml")]
-        manifest: String,
-        /// Binary to run.
-        binary: String,
-        /// Arguments to pass to the binary.
-        args: Vec<String>,
+        /// Command and arguments. Hyphen-prefixed flags are forwarded to the child.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 1..)]
+        argv: Vec<String>,
     },
 
     /// Open the desktop UI. Not yet implemented (M5).
