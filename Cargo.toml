@@ -26,6 +26,7 @@ tauri        = { version = "2", features = [] }
 tauri-build  = { version = "2", features = [] }
 tauri-plugin-clipboard-manager = "2"
 tempfile    = "3"
+age         = "0.10"
 
 [profile.release]
 strip = true
