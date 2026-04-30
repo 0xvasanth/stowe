@@ -1,16 +1,16 @@
-use zeroize::Zeroize;
+use zeroize::Zeroizing;
 
 /// Owns a secret value. Wipes its bytes from memory on drop.
 /// Never implements `Debug`. `Display` redacts and shows length only.
-pub struct SecretValue(Vec<u8>);
+pub struct SecretValue(Zeroizing<Vec<u8>>);
 
 impl SecretValue {
     pub fn new(bytes: Vec<u8>) -> Self {
-        Self(bytes)
+        Self(Zeroizing::new(bytes))
     }
 
     pub fn from_string(s: String) -> Self {
-        Self(s.into_bytes())
+        Self(Zeroizing::new(s.into_bytes()))
     }
 
     pub fn expose(&self) -> &[u8] {
@@ -23,12 +23,6 @@ impl SecretValue {
 
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
-    }
-}
-
-impl Drop for SecretValue {
-    fn drop(&mut self) {
-        self.0.zeroize();
     }
 }
 
@@ -52,8 +46,7 @@ mod tests {
     fn display_does_not_leak_value() {
         let s = SecretValue::from_string("super-secret".to_string());
         let displayed = format!("{}", s);
-        assert!(!displayed.contains("super-secret"), "Display leaked secret: {}", displayed);
-        assert!(displayed.contains("12 bytes"), "Display did not show length: {}", displayed);
+        assert_eq!(displayed, "<redacted: 12 bytes>");
     }
 
     #[test]
