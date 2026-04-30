@@ -14,7 +14,7 @@ pub struct IndexEntry {
     pub added_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct IndexFile {
     #[serde(default = "default_version")]
     version: u32,
@@ -55,8 +55,7 @@ impl Index {
             });
         }
         let text = std::fs::read_to_string(&path)?;
-        let file: IndexFile =
-            toml::from_str(&text).map_err(|e| Error::Toml(e.to_string()))?;
+        let file: IndexFile = toml::from_str(&text).map_err(|e| Error::Toml(e.to_string()))?;
         if file.version != INDEX_VERSION {
             return Err(Error::Invalid(format!(
                 "unsupported index version {} (expected {})",
@@ -70,8 +69,7 @@ impl Index {
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let text = toml::to_string_pretty(&self.file)
-            .map_err(|e| Error::Toml(e.to_string()))?;
+        let text = toml::to_string_pretty(&self.file).map_err(|e| Error::Toml(e.to_string()))?;
         std::fs::write(&self.path, text)?;
         Ok(())
     }
