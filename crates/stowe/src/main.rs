@@ -7,6 +7,10 @@ use cli::{Cli, Command};
 use dialoguer::Password;
 use stowe_core::{KeychainVault, SecretValue};
 
+fn open_vault() -> Result<KeychainVault> {
+    KeychainVault::open_default().context("opening Keychain vault")
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -16,7 +20,7 @@ fn main() -> Result<()> {
                 .with_prompt(format!("Value for stowe.{}/{}", namespace, var))
                 .interact()
                 .context("reading value")?;
-            let mut vault = KeychainVault::open_default().context("opening Keychain vault")?;
+            let mut vault = open_vault()?;
             commands::add::run(
                 &mut vault,
                 &namespace,
@@ -28,7 +32,7 @@ fn main() -> Result<()> {
         }
 
         Command::List { namespace } => {
-            let vault = KeychainVault::open_default().context("opening Keychain vault")?;
+            let vault = open_vault()?;
             match namespace {
                 None => {
                     let summaries = commands::list::namespaces(&vault)?;
@@ -54,7 +58,7 @@ fn main() -> Result<()> {
         }
 
         Command::Reveal { namespace, var } => {
-            let vault = KeychainVault::open_default().context("opening Keychain vault")?;
+            let vault = open_vault()?;
             let value = commands::reveal::run(&vault, &namespace, &var)
                 .with_context(|| format!("reading stowe.{}/{}", namespace, var))?;
             // Write raw bytes to stdout; safe for binary values.

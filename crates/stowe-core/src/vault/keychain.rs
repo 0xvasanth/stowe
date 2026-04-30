@@ -34,7 +34,8 @@ impl KeychainVault {
         Ok(Self { index })
     }
 
-    /// Open with a custom index path. Used in tests.
+    /// Open with a custom index path. Used in tests only.
+    #[cfg(test)]
     pub fn open_with_index(index: Index) -> Self {
         Self { index }
     }

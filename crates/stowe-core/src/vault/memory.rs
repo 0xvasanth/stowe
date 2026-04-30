@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use zeroize::Zeroizing;
+
 use crate::{
     error::{Error, Result},
     secret_value::SecretValue,
@@ -10,7 +12,7 @@ use crate::{
 /// against which `KeychainVault` behavior is verified.
 #[derive(Default)]
 pub struct InMemoryVault {
-    items: HashMap<(String, String), Vec<u8>>,
+    items: HashMap<(String, String), Zeroizing<Vec<u8>>>,
 }
 
 impl InMemoryVault {
@@ -23,7 +25,7 @@ impl Vault for InMemoryVault {
     fn set(&mut self, namespace: &str, var: &str, value: SecretValue) -> Result<()> {
         self.items.insert(
             (namespace.to_string(), var.to_string()),
-            value.expose().to_vec(),
+            Zeroizing::new(value.expose().to_vec()),
         );
         Ok(())
     }
@@ -31,8 +33,7 @@ impl Vault for InMemoryVault {
     fn get(&self, namespace: &str, var: &str) -> Result<SecretValue> {
         self.items
             .get(&(namespace.to_string(), var.to_string()))
-            .cloned()
-            .map(SecretValue::new)
+            .map(|z| SecretValue::new(z.to_vec()))
             .ok_or_else(|| Error::NotFound {
                 namespace: namespace.to_string(),
                 var: var.to_string(),
