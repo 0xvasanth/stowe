@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "secrets",
+    name = "stowe",
     version,
     about = "Local-first secrets vault (macOS Keychain).",
     long_about = None,
@@ -28,7 +28,7 @@ pub enum Command {
         namespace: Option<String>,
     },
 
-    /// Print a secret to stdout. Use `secrets reveal <ns> <var>`.
+    /// Print a secret to stdout. Use `stowe reveal <ns> <var>`.
     Reveal {
         /// Namespace (e.g. project name).
         namespace: String,

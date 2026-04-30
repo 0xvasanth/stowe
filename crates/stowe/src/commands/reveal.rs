@@ -1,4 +1,4 @@
-use secrets_core::{Result, SecretValue, Vault};
+use stowe_core::{Result, SecretValue, Vault};
 
 /// Read the secret at `(namespace, var)` and return its value.
 /// `Error::NotFound` if absent.
@@ -9,7 +9,7 @@ pub fn run(vault: &dyn Vault, namespace: &str, var: &str) -> Result<SecretValue>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use secrets_core::{Error, InMemoryVault};
+    use stowe_core::{Error, InMemoryVault};
 
     fn sv(s: &str) -> SecretValue {
         SecretValue::from_string(s.to_string())

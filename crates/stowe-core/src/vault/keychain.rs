@@ -9,14 +9,14 @@ use crate::{
     vault::Vault,
 };
 
-const SERVICE_PREFIX: &str = "secrets.";
+const SERVICE_PREFIX: &str = "stowe.";
 
 /// `errSecItemNotFound` from Apple's `Security.framework`. Not re-exported
 /// by the `security-framework` crate; we use the numeric value directly.
 const ERR_SEC_ITEM_NOT_FOUND: i32 = -25300;
 
 /// macOS Keychain-backed Vault. Stores values as Generic Password items
-/// under service `secrets.<namespace>` and account `<VAR>`.
+/// under service `stowe.<namespace>` and account `<VAR>`.
 ///
 /// Listing operations read from a local `Index` because Keychain search
 /// has an awkward Rust API surface; the Index is updated on every
@@ -27,7 +27,7 @@ pub struct KeychainVault {
 
 impl KeychainVault {
     /// Open with the default index location:
-    /// `~/Library/Application Support/secrets/index.toml`.
+    /// `~/Library/Application Support/stowe/index.toml`.
     pub fn open_default() -> Result<Self> {
         let path = Index::default_path()?;
         let index = Index::load(&path)?;
@@ -110,7 +110,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        format!("test.secrets.m1.{}", nanos)
+        format!("test.stowe.m1.{}", nanos)
     }
 
     fn fresh_vault() -> (KeychainVault, tempfile::TempDir) {

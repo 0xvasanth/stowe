@@ -34,11 +34,11 @@ pub struct Index {
 }
 
 impl Index {
-    /// Default location: `~/Library/Application Support/secrets/index.toml`.
+    /// Default location: `~/Library/Application Support/stowe/index.toml`.
     pub fn default_path() -> Result<PathBuf> {
         let base = dirs::data_dir()
             .ok_or_else(|| Error::Invalid("could not resolve OS data dir".into()))?;
-        Ok(base.join("secrets").join("index.toml"))
+        Ok(base.join("stowe").join("index.toml"))
     }
 
     /// Load from `path`. If the file does not exist, returns an empty index

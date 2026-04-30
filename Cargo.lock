@@ -533,30 +533,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 
 [[package]]
-name = "secrets"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "clap",
- "dialoguer",
- "secrets-core",
-]
-
-[[package]]
-name = "secrets-core"
-version = "0.0.1"
-dependencies = [
- "chrono",
- "dirs",
- "security-framework",
- "serde",
- "tempfile",
- "thiserror",
- "toml",
- "zeroize",
-]
-
-[[package]]
 name = "security-framework"
 version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -654,6 +630,30 @@ name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
+
+[[package]]
+name = "stowe"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "clap",
+ "dialoguer",
+ "stowe-core",
+]
+
+[[package]]
+name = "stowe-core"
+version = "0.0.1"
+dependencies = [
+ "chrono",
+ "dirs",
+ "security-framework",
+ "serde",
+ "tempfile",
+ "thiserror",
+ "toml",
+ "zeroize",
+]
 
 [[package]]
 name = "strsim"

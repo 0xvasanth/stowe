@@ -1,4 +1,4 @@
-use secrets_core::{Result, Vault};
+use stowe_core::{Result, Vault};
 
 pub struct NamespaceSummary {
     pub namespace: String,
@@ -27,7 +27,7 @@ pub fn vars(vault: &dyn Vault, namespace: &str) -> Result<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use secrets_core::{InMemoryVault, SecretValue};
+    use stowe_core::{InMemoryVault, SecretValue};
 
     fn sv(s: &str) -> SecretValue {
         SecretValue::from_string(s.to_string())

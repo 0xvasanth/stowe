@@ -1,4 +1,4 @@
-use secrets_core::{Result, SecretValue, Vault};
+use stowe_core::{Result, SecretValue, Vault};
 
 /// Store `value` at `(namespace, var)`. Overwrites existing.
 pub fn run(vault: &mut dyn Vault, namespace: &str, var: &str, value: SecretValue) -> Result<()> {
@@ -8,7 +8,7 @@ pub fn run(vault: &mut dyn Vault, namespace: &str, var: &str, value: SecretValue
 #[cfg(test)]
 mod tests {
     use super::*;
-    use secrets_core::InMemoryVault;
+    use stowe_core::InMemoryVault;
 
     #[test]
     fn stores_value_in_vault() {

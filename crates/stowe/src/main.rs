@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use cli::{Cli, Command};
 use dialoguer::Password;
-use secrets_core::{KeychainVault, SecretValue};
+use stowe_core::{KeychainVault, SecretValue};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -13,7 +13,7 @@ fn main() -> Result<()> {
     match cli.command {
         Command::Add { namespace, var } => {
             let value = Password::new()
-                .with_prompt(format!("Value for secrets.{}/{}", namespace, var))
+                .with_prompt(format!("Value for stowe.{}/{}", namespace, var))
                 .interact()
                 .context("reading value")?;
             let mut vault = KeychainVault::open_default().context("opening Keychain vault")?;
@@ -23,8 +23,8 @@ fn main() -> Result<()> {
                 &var,
                 SecretValue::from_string(value),
             )
-            .with_context(|| format!("storing secrets.{}/{}", namespace, var))?;
-            println!("stored secrets.{}/{}", namespace, var);
+            .with_context(|| format!("storing stowe.{}/{}", namespace, var))?;
+            println!("stored stowe.{}/{}", namespace, var);
         }
 
         Command::List { namespace } => {
@@ -56,7 +56,7 @@ fn main() -> Result<()> {
         Command::Reveal { namespace, var } => {
             let vault = KeychainVault::open_default().context("opening Keychain vault")?;
             let value = commands::reveal::run(&vault, &namespace, &var)
-                .with_context(|| format!("reading secrets.{}/{}", namespace, var))?;
+                .with_context(|| format!("reading stowe.{}/{}", namespace, var))?;
             // Write raw bytes to stdout; safe for binary values.
             use std::io::Write;
             let mut out = std::io::stdout().lock();
@@ -65,7 +65,7 @@ fn main() -> Result<()> {
         }
 
         Command::Ui => {
-            eprintln!("`secrets ui` not yet implemented (planned for M5).");
+            eprintln!("`stowe ui` not yet implemented (planned for M5).");
             std::process::exit(2);
         }
     }
