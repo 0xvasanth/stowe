@@ -5,7 +5,13 @@ use rusqlite::{params, Connection};
 
 use crate::error::{Error, Result};
 
+const SCHEMA_VERSION: i64 = 1;
+
 const SCHEMA: &str = r#"
+CREATE TABLE IF NOT EXISTS schema_version (
+    version INTEGER PRIMARY KEY NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS accesses (
     id           INTEGER PRIMARY KEY,
     ts           TEXT    NOT NULL,
@@ -90,9 +96,37 @@ impl Audit {
             std::fs::create_dir_all(parent)?;
         }
         let conn = Connection::open(path)
-            .map_err(|e| Error::Invalid(format!("opening audit db: {}", e)))?;
+            .map_err(|e| Error::Database(format!("opening audit db: {}", e)))?;
+
+        // WAL mode: better write throughput, readers don't block writers.
+        // Set BEFORE first INSERT for it to apply.
+        conn.pragma_update(None, "journal_mode", "wal")
+            .map_err(|e| Error::Database(format!("setting WAL mode: {}", e)))?;
+
         conn.execute_batch(SCHEMA)
-            .map_err(|e| Error::Invalid(format!("creating audit schema: {}", e)))?;
+            .map_err(|e| Error::Database(format!("creating audit schema: {}", e)))?;
+
+        // Schema version: insert v1 if absent; reject if a newer version is recorded.
+        let existing_version: Option<i64> = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .ok();
+        match existing_version {
+            None => {
+                conn.execute(
+                    "INSERT INTO schema_version (version) VALUES (?1)",
+                    params![SCHEMA_VERSION],
+                )
+                .map_err(|e| Error::Database(format!("recording schema version: {}", e)))?;
+            }
+            Some(v) if v == SCHEMA_VERSION => { /* same version — OK */ }
+            Some(v) => {
+                return Err(Error::Database(format!(
+                    "audit DB schema version {} is newer than supported version {}",
+                    v, SCHEMA_VERSION
+                )));
+            }
+        }
+
         Ok(Self { conn })
     }
 
@@ -101,9 +135,9 @@ impl Audit {
     pub fn open_run(&self, info: &OpenRun<'_>) -> Result<AuditRowId> {
         let ts = Utc::now().to_rfc3339();
         let var_names_json = serde_json::to_string(info.var_names)
-            .map_err(|e| Error::Invalid(format!("serializing var_names: {}", e)))?;
+            .map_err(|e| Error::Database(format!("serializing var_names: {}", e)))?;
         let argv_json = serde_json::to_string(info.argv)
-            .map_err(|e| Error::Invalid(format!("serializing argv: {}", e)))?;
+            .map_err(|e| Error::Database(format!("serializing argv: {}", e)))?;
         self.conn
             .execute(
                 "INSERT INTO accesses
@@ -123,7 +157,7 @@ impl Audit {
                     info.reason,
                 ],
             )
-            .map_err(|e| Error::Invalid(format!("inserting audit row: {}", e)))?;
+            .map_err(|e| Error::Database(format!("inserting audit row: {}", e)))?;
         Ok(self.conn.last_insert_rowid())
     }
 
@@ -135,9 +169,9 @@ impl Audit {
                 "UPDATE accesses SET duration_ms = ?1, child_exit = ?2 WHERE id = ?3",
                 params![close.duration_ms, close.child_exit, id],
             )
-            .map_err(|e| Error::Invalid(format!("updating audit row: {}", e)))?;
+            .map_err(|e| Error::Database(format!("updating audit row: {}", e)))?;
         if updated == 0 {
-            return Err(Error::Invalid(format!(
+            return Err(Error::Database(format!(
                 "audit row {} not found for close",
                 id
             )));
@@ -146,11 +180,12 @@ impl Audit {
     }
 
     /// Total number of rows. Used in tests; harmless in production.
+    #[cfg(test)]
     pub fn row_count(&self) -> Result<i64> {
         let n: i64 = self
             .conn
             .query_row("SELECT COUNT(*) FROM accesses", [], |row| row.get(0))
-            .map_err(|e| Error::Invalid(format!("counting audit rows: {}", e)))?;
+            .map_err(|e| Error::Database(format!("counting audit rows: {}", e)))?;
         Ok(n)
     }
 }
@@ -229,11 +264,11 @@ mod tests {
     fn close_run_unknown_id_errors() {
         let (a, _d) = fresh_audit();
         let err = a.close_run(9999, CloseRun::default()).unwrap_err();
-        assert!(matches!(err, Error::Invalid(msg) if msg.contains("not found")));
+        assert!(matches!(err, Error::Database(msg) if msg.contains("not found")));
     }
 
     #[test]
-    fn outcome_serializes_string() {
+    fn outcome_as_str() {
         assert_eq!(Outcome::Allowed.as_str(), "allowed");
         assert_eq!(Outcome::Denied.as_str(), "denied");
         assert_eq!(Outcome::BiometricFailed.as_str(), "biometric_failed");

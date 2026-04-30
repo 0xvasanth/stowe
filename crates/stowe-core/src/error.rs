@@ -17,6 +17,9 @@ pub enum Error {
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 
+    #[error("database error: {0}")]
+    Database(String),
+
     #[error("toml parse error: {0}")]
     Toml(String),
 
