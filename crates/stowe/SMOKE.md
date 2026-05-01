@@ -464,3 +464,55 @@ age -d ~/Desktop/stowe-backup-*.age
   migration; delete the file after.
 - **stowe.toml files** in projects are NOT touched by Wipe.
 - **Onboarding** and **filterable audit view** are deferred to M5d.
+
+---
+
+## M5d additions: UI polish
+
+### Filterable audit view
+
+```bash
+"$STOWE" ui &
+# 1. Click "Audit" tab in the header.
+# 2. The full audit log loads with filter bar (Namespace, Outcome, Limit).
+# 3. Drop the Outcome filter to "denied" — list narrows to denial rows.
+# 4. Click a row — it expands inline showing full path, sha, pid, argv,
+#    duration, exit code, and reason if present.
+# 5. Switch back to "Vault" tab — sidebar + project detail re-renders.
+```
+
+### Edit existing secret
+
+```bash
+# 1. In Vault tab, click any namespace.
+# 2. Click "Edit" next to a variable.
+# 3. Modal opens with the var name pre-filled and a new-value field.
+# 4. Type a new value, click "Save".
+# 5. Modal closes, list refreshes. Reveal to confirm new value sticks.
+```
+
+### Onboarding wizard (first-run only)
+
+The wizard fires only when:
+- The vault has no namespaces, AND
+- `localStorage` has no `stowe.onboarding_seen=true` flag.
+
+```bash
+# To force-re-test on a populated vault:
+# (in the running webview's devtools console)
+localStorage.removeItem('stowe.onboarding_seen');
+# ...then run "$STOWE" wipe (typing the phrase) to empty the vault.
+# Re-launch UI: the 3-step wizard appears.
+# Click "Create a sample secret" on step 2 — adds demo/EXAMPLE_KEY.
+```
+
+### Notes on M5d
+
+- **Audit view** queries the same SQLite file the bottom strip polls — both
+  reflect the same data; the strip is live (5s) while the audit view
+  refreshes only when filters change.
+- **Edit secret** uses `addSecret` under the hood (which is upsert via
+  `set_with_biometric`); biometric=always still hits the M6 entitlement
+  gate from unsigned builds.
+- **Onboarding** uses `localStorage` to remember the dismiss. Clearing
+  the webview's storage (or wiping the vault to empty) re-triggers it.
