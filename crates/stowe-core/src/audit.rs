@@ -72,6 +72,29 @@ pub struct CloseRun {
     pub child_exit: Option<i32>,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct AuditFilter {
+    pub namespace: Option<String>,
+    pub outcome: Option<String>,
+    pub limit: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct AccessRow {
+    pub id: i64,
+    pub ts: String,
+    pub namespace: String,
+    pub var_names: Vec<String>,
+    pub binary_path: String,
+    pub binary_hash: Option<String>,
+    pub pid: Option<i64>,
+    pub argv: Vec<String>,
+    pub outcome: String,
+    pub reason: Option<String>,
+    pub duration_ms: Option<i64>,
+    pub child_exit: Option<i32>,
+}
+
 /// SQLite-backed audit log.
 pub struct Audit {
     conn: Connection,
@@ -231,6 +254,59 @@ impl Audit {
             .map_err(|e| Error::Database(format!("counting audit rows: {}", e)))?;
         Ok(n)
     }
+
+    /// Query the audit log with optional filters. Returns rows in
+    /// descending id order (most recent first).
+    pub fn list_filtered(&self, filter: &AuditFilter) -> Result<Vec<AccessRow>> {
+        let limit = filter.limit.clamp(1, 1000);
+        let mut sql = String::from(
+            "SELECT id, ts, namespace, var_names, binary_path, binary_hash,
+                    pid, argv, outcome, reason, duration_ms, child_exit
+             FROM accesses WHERE 1=1",
+        );
+        let mut bound: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        if let Some(ns) = &filter.namespace {
+            sql.push_str(" AND namespace = ?");
+            bound.push(Box::new(ns.clone()));
+        }
+        if let Some(out) = &filter.outcome {
+            sql.push_str(" AND outcome = ?");
+            bound.push(Box::new(out.clone()));
+        }
+        sql.push_str(" ORDER BY id DESC LIMIT ?");
+        bound.push(Box::new(limit));
+
+        let mut stmt = self
+            .conn
+            .prepare(&sql)
+            .map_err(|e| Error::Database(format!("preparing audit query: {}", e)))?;
+        let param_refs: Vec<&dyn rusqlite::ToSql> = bound.iter().map(|p| p.as_ref()).collect();
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(param_refs), |row| {
+                let var_names_json: String = row.get(3)?;
+                let argv_json: String = row.get(7)?;
+                Ok(AccessRow {
+                    id: row.get(0)?,
+                    ts: row.get(1)?,
+                    namespace: row.get(2)?,
+                    var_names: serde_json::from_str(&var_names_json).unwrap_or_default(),
+                    binary_path: row.get(4)?,
+                    binary_hash: row.get(5)?,
+                    pid: row.get(6)?,
+                    argv: serde_json::from_str(&argv_json).unwrap_or_default(),
+                    outcome: row.get(8)?,
+                    reason: row.get(9)?,
+                    duration_ms: row.get(10)?,
+                    child_exit: row.get(11)?,
+                })
+            })
+            .map_err(|e| Error::Database(format!("running audit query: {}", e)))?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(|e| Error::Database(format!("decoding audit row: {}", e)))?);
+        }
+        Ok(out)
+    }
 }
 
 #[cfg(test)]
@@ -357,5 +433,103 @@ mod tests {
         assert_eq!(outcome, "denied");
         assert_eq!(reason, "binary not allowed");
         assert_eq!(child_exit, None);
+    }
+
+    #[test]
+    fn list_filtered_returns_all_with_no_filters() {
+        let (a, _d) = fresh_audit();
+        let vars = vec!["X".to_string()];
+        let argv = vec!["echo".to_string()];
+        for _ in 0..3 {
+            a.open_run(&sample_open(&vars, &argv)).unwrap();
+        }
+        let rows = a
+            .list_filtered(&AuditFilter {
+                namespace: None,
+                outcome: None,
+                limit: 100,
+            })
+            .unwrap();
+        assert_eq!(rows.len(), 3);
+    }
+
+    #[test]
+    fn list_filtered_namespace_filter() {
+        let (a, _d) = fresh_audit();
+        let vars = vec!["X".to_string()];
+        let argv = vec!["echo".to_string()];
+        for _ in 0..2 {
+            a.open_run(&OpenRun {
+                namespace: "alpha",
+                var_names: &vars,
+                binary_path: "/bin/echo",
+                binary_hash: None,
+                pid: Some(1),
+                ppid: None,
+                argv: &argv,
+                outcome: Outcome::Allowed,
+                reason: None,
+            })
+            .unwrap();
+        }
+        a.open_run(&OpenRun {
+            namespace: "beta",
+            var_names: &vars,
+            binary_path: "/bin/echo",
+            binary_hash: None,
+            pid: Some(1),
+            ppid: None,
+            argv: &argv,
+            outcome: Outcome::Allowed,
+            reason: None,
+        })
+        .unwrap();
+
+        let alpha = a
+            .list_filtered(&AuditFilter {
+                namespace: Some("alpha".into()),
+                outcome: None,
+                limit: 100,
+            })
+            .unwrap();
+        assert_eq!(alpha.len(), 2);
+        assert!(alpha.iter().all(|r| r.namespace == "alpha"));
+    }
+
+    #[test]
+    fn list_filtered_outcome_filter() {
+        let (a, _d) = fresh_audit();
+        let vars = vec!["X".to_string()];
+        let argv = vec!["echo".to_string()];
+        a.open_run(&sample_open(&vars, &argv)).unwrap();
+        a.write_denial("ns", "/tmp/bad", &argv, "test").unwrap();
+
+        let denied = a
+            .list_filtered(&AuditFilter {
+                namespace: None,
+                outcome: Some("denied".into()),
+                limit: 100,
+            })
+            .unwrap();
+        assert_eq!(denied.len(), 1);
+        assert_eq!(denied[0].outcome, "denied");
+    }
+
+    #[test]
+    fn list_filtered_limit_clamps() {
+        let (a, _d) = fresh_audit();
+        let vars = vec!["X".to_string()];
+        let argv = vec!["echo".to_string()];
+        for _ in 0..5 {
+            a.open_run(&sample_open(&vars, &argv)).unwrap();
+        }
+        let rows = a
+            .list_filtered(&AuditFilter {
+                namespace: None,
+                outcome: None,
+                limit: 2,
+            })
+            .unwrap();
+        assert_eq!(rows.len(), 2);
     }
 }

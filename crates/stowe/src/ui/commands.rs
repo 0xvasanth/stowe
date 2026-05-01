@@ -188,3 +188,51 @@ pub fn wipe_all_cmd(also_audit: bool) -> Result<WipeReportDto, String> {
         audit_rows_deleted: report.audit_rows_deleted,
     })
 }
+
+#[derive(Serialize)]
+pub struct AccessRowDto {
+    pub id: i64,
+    pub ts: String,
+    pub namespace: String,
+    pub var_names: Vec<String>,
+    pub binary_path: String,
+    pub binary_hash: Option<String>,
+    pub pid: Option<i64>,
+    pub argv: Vec<String>,
+    pub outcome: String,
+    pub reason: Option<String>,
+    pub duration_ms: Option<i64>,
+    pub child_exit: Option<i32>,
+}
+
+#[tauri::command]
+pub fn audit_query_cmd(
+    namespace: Option<String>,
+    outcome: Option<String>,
+    limit: i64,
+) -> Result<Vec<AccessRowDto>, String> {
+    let audit = Audit::open_default().map_err(|e| e.to_string())?;
+    let filter = stowe_core::AuditFilter {
+        namespace,
+        outcome,
+        limit,
+    };
+    let rows = audit.list_filtered(&filter).map_err(|e| e.to_string())?;
+    Ok(rows
+        .into_iter()
+        .map(|r| AccessRowDto {
+            id: r.id,
+            ts: r.ts,
+            namespace: r.namespace,
+            var_names: r.var_names,
+            binary_path: r.binary_path,
+            binary_hash: r.binary_hash,
+            pid: r.pid,
+            argv: r.argv,
+            outcome: r.outcome,
+            reason: r.reason,
+            duration_ms: r.duration_ms,
+            child_exit: r.child_exit,
+        })
+        .collect())
+}

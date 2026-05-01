@@ -10,7 +10,7 @@ pub mod secret_value;
 pub mod vault;
 pub mod wipe;
 
-pub use audit::{Audit, AuditRowId, CloseRun, OpenRun, Outcome};
+pub use audit::{AccessRow, Audit, AuditFilter, AuditRowId, CloseRun, OpenRun, Outcome};
 pub use codesign::CodesignInfo;
 pub use error::{Error, Result};
 pub use export::{export_to_bytes, export_to_path, ExportFormat};
