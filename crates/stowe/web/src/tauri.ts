@@ -119,3 +119,26 @@ export async function chooseSavePath(
   });
   return result;
 }
+
+export interface AccessRow {
+  id: number;
+  ts: string;
+  namespace: string;
+  var_names: string[];
+  binary_path: string;
+  binary_hash: string | null;
+  pid: number | null;
+  argv: string[];
+  outcome: string;
+  reason: string | null;
+  duration_ms: number | null;
+  child_exit: number | null;
+}
+
+export async function auditQuery(
+  namespace: string | null,
+  outcome: string | null,
+  limit: number,
+): Promise<AccessRow[]> {
+  return invoke<AccessRow[]>("audit_query_cmd", { namespace, outcome, limit });
+}
