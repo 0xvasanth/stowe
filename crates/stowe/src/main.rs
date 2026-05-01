@@ -7,7 +7,7 @@ use anyhow::{anyhow, Context, Result};
 use clap::Parser;
 use cli::{Cli, Command};
 use dialoguer::Password;
-use stowe_core::{Audit, KeychainVault, Manifest, SecretValue};
+use stowe_core::{Audit, KeychainVault, Manifest, SecretValue, Vault};
 
 fn open_vault() -> Result<KeychainVault> {
     KeychainVault::open_default().context("opening Keychain vault")
@@ -204,6 +204,120 @@ fn main() -> Result<()> {
                 "wiped {} namespaces, {} secrets, {} audit rows",
                 report.namespaces_deleted, report.vars_deleted, report.audit_rows_deleted
             );
+        }
+
+        Command::Init { namespace, force } => {
+            let cwd = std::env::current_dir().context("getting cwd")?;
+            let manifest_path = cwd.join("stowe.toml");
+            if manifest_path.exists() && !force {
+                return Err(anyhow!(
+                    "stowe.toml already exists at {}; pass --force to overwrite",
+                    manifest_path.display()
+                ));
+            }
+
+            let default_ns = cwd
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("project")
+                .to_string();
+            let ns = match namespace {
+                Some(n) => n,
+                None => dialoguer::Input::<String>::new()
+                    .with_prompt("Namespace")
+                    .default(default_ns)
+                    .interact_text()
+                    .context("reading namespace")?,
+            };
+
+            eprintln!("Enter required variable names, one per line. Empty line to finish.");
+            let mut vars: Vec<String> = Vec::new();
+            loop {
+                let result = dialoguer::Input::<String>::new()
+                    .with_prompt(format!("var #{}", vars.len() + 1))
+                    .allow_empty(true)
+                    .interact_text();
+                match result {
+                    Ok(entry) if entry.is_empty() => break,
+                    Ok(entry) => vars.push(entry),
+                    Err(dialoguer::Error::IO(e))
+                        if e.kind() == std::io::ErrorKind::NotConnected =>
+                    {
+                        break
+                    }
+                    Err(e) => return Err(anyhow::anyhow!("{}", e)).context("reading var name"),
+                }
+            }
+
+            let mut body = format!("namespace = \"{}\"\n", ns);
+            if !vars.is_empty() {
+                body.push_str("\n[vars]\n");
+                for v in &vars {
+                    body.push_str(&format!("{} = {{ required = true }}\n", v));
+                }
+            }
+
+            std::fs::write(&manifest_path, body)
+                .with_context(|| format!("writing {}", manifest_path.display()))?;
+            println!(
+                "wrote {} ({} vars declared)",
+                manifest_path.display(),
+                vars.len()
+            );
+        }
+
+        Command::Bootstrap { biometric } => {
+            let mode = match biometric.as_str() {
+                "always" => stowe_core::BiometricMode::Always,
+                "never" => stowe_core::BiometricMode::Never,
+                other => return Err(anyhow!("unknown --biometric value: {}", other)),
+            };
+
+            let cwd = std::env::current_dir().context("getting cwd")?;
+            let (manifest_path, manifest) = Manifest::find_from_or_err(&cwd)
+                .with_context(|| format!("looking for stowe.toml from {}", cwd.display()))?;
+
+            eprintln!("manifest: {}", manifest_path.display());
+            eprintln!("namespace: {}", manifest.namespace);
+
+            let mut vault = open_vault()?;
+
+            let mut missing: Vec<&str> = Vec::new();
+            for (name, spec) in &manifest.vars {
+                if !spec.required {
+                    continue;
+                }
+                match vault.get(&manifest.namespace, name) {
+                    Ok(_) => {}
+                    Err(stowe_core::Error::NotFound { .. }) => missing.push(name),
+                    Err(e) => return Err(e).context("checking vault"),
+                }
+            }
+
+            if missing.is_empty() {
+                println!("nothing to do — all required vars are present");
+                return Ok(());
+            }
+
+            eprintln!(
+                "{} required var(s) missing; prompting for values:",
+                missing.len()
+            );
+            for var in &missing {
+                let value = Password::new()
+                    .with_prompt(format!("Value for {}", var))
+                    .interact()
+                    .with_context(|| format!("reading value for {}", var))?;
+                vault
+                    .set_with_biometric(
+                        &manifest.namespace,
+                        var,
+                        SecretValue::from_string(value),
+                        mode,
+                    )
+                    .with_context(|| format!("storing {}", var))?;
+                println!("stored {}", var);
+            }
         }
 
         Command::Ui => {

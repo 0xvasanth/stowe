@@ -71,6 +71,24 @@ pub enum Command {
         also_audit: bool,
     },
 
+    /// Create a `stowe.toml` in the current directory interactively.
+    Init {
+        /// Namespace for this project. Defaults to the cwd's basename.
+        #[arg(long)]
+        namespace: Option<String>,
+        /// Overwrite an existing `stowe.toml` if present.
+        #[arg(long)]
+        force: bool,
+    },
+
+    /// Read `stowe.toml` (walking up from cwd) and prompt for any
+    /// required variables that aren't yet in the vault.
+    Bootstrap {
+        /// Biometric protection for newly-added secrets.
+        #[arg(long, default_value = "never", value_parser = ["always", "never"])]
+        biometric: String,
+    },
+
     /// Open the desktop UI (read-only Vault view). Edit flows land in M5b.
     Ui,
 }
