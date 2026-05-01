@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { listVars, deleteSecret } from "../tauri";
 import { RevealDialog } from "./RevealDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { EditSecretDialog } from "./EditSecretDialog";
 
 interface Props {
   namespace: string | null;
@@ -14,6 +15,7 @@ export function ProjectDetail({ namespace, refreshKey, onChanged }: Props) {
   const [vars, setVars] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [revealing, setRevealing] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -81,6 +83,12 @@ export function ProjectDetail({ namespace, refreshKey, onChanged }: Props) {
                     Reveal
                   </button>
                   <button
+                    className="btn-link"
+                    onClick={() => setEditing(v)}
+                  >
+                    Edit
+                  </button>
+                  <button
                     className="btn-link btn-link-destructive"
                     onClick={() => {
                       setDeleting(v);
@@ -101,6 +109,18 @@ export function ProjectDetail({ namespace, refreshKey, onChanged }: Props) {
           namespace={namespace}
           variable={revealing}
           onClose={() => setRevealing(null)}
+        />
+      )}
+
+      {editing && (
+        <EditSecretDialog
+          namespace={namespace}
+          variable={editing}
+          onSuccess={() => {
+            setEditing(null);
+            onChanged();
+          }}
+          onCancel={() => setEditing(null)}
         />
       )}
 
