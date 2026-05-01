@@ -416,3 +416,172 @@ html, body, #root {
 .btn-danger-tone:hover {
   background: rgba(255, 59, 48, 0.12);
 }
+
+/* Tab nav */
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.tab-nav {
+  display: flex;
+  gap: 4px;
+}
+
+.tab {
+  background: none;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  color: #6e6e73;
+}
+
+.tab:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.tab.active {
+  background: rgba(10, 132, 255, 0.15);
+  color: #0a84ff;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tab:hover { background: rgba(255, 255, 255, 0.05); }
+}
+
+.app-main-single {
+  grid-template-columns: 1fr;
+  padding: 0;
+  overflow: auto;
+}
+
+/* Audit log view */
+.audit-log-view {
+  padding: 20px;
+  max-width: 100%;
+  overflow: auto;
+}
+
+.audit-filters {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  align-items: end;
+}
+
+.audit-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.audit-filters span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6e6e73;
+}
+
+.audit-filters select,
+.audit-filters input {
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  border: 1px solid #d2d2d7;
+  border-radius: 6px;
+  background: #ffffff;
+  color: inherit;
+}
+
+@media (prefers-color-scheme: dark) {
+  .audit-filters select,
+  .audit-filters input {
+    background: #1c1c1e;
+    border-color: #2c2c2e;
+  }
+}
+
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.audit-table th {
+  text-align: left;
+  padding: 8px 6px;
+  border-bottom: 2px solid #d2d2d7;
+  color: #6e6e73;
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.audit-table td {
+  padding: 6px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  .audit-table th { border-bottom-color: #2c2c2e; }
+  .audit-table td { border-bottom-color: rgba(255, 255, 255, 0.06); }
+}
+
+.audit-row {
+  cursor: pointer;
+}
+
+.audit-row:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+@media (prefers-color-scheme: dark) {
+  .audit-row:hover { background: rgba(255, 255, 255, 0.04); }
+}
+
+.audit-row.denied {
+  color: #ff3b30;
+}
+
+.audit-row .ts {
+  font-family: "SF Mono", Menlo, monospace;
+  color: #6e6e73;
+  font-size: 12px;
+}
+
+.audit-row-detail {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+@media (prefers-color-scheme: dark) {
+  .audit-row-detail { background: rgba(255, 255, 255, 0.03); }
+}
+
+.audit-row-detail dl {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 4px 12px;
+  margin: 8px 0;
+  font-size: 12px;
+}
+
+.audit-row-detail dt {
+  color: #6e6e73;
+  font-weight: 500;
+}
+
+.audit-row-detail dd {
+  margin: 0;
+  font-family: "SF Mono", Menlo, monospace;
+  word-break: break-all;
+}
+
+/* Widen actions column for the Edit button. */
+.project-detail .actions-col {
+  width: 220px;
+}
