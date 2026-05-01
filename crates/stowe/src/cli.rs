@@ -49,6 +49,28 @@ pub enum Command {
         argv: Vec<String>,
     },
 
+    /// Export the vault to a backup file. Defaults to age-encrypted format
+    /// with a passphrase prompt; pass `--plain` to dump cleartext .env.
+    Export {
+        /// Output path. If omitted, prints to stdout (encrypted only).
+        #[arg(short, long)]
+        output: Option<String>,
+        /// Use plaintext .env format. Insecure; only for migration.
+        #[arg(long)]
+        plain: bool,
+        /// Filter to specific namespaces. Empty = all.
+        #[arg(long, value_name = "NS")]
+        namespace: Vec<String>,
+    },
+
+    /// Permanently delete every secret stowe knows about. Requires typing
+    /// the literal phrase `WIPE EVERYTHING` to confirm.
+    Wipe {
+        /// Also truncate the audit log.
+        #[arg(long)]
+        also_audit: bool,
+    },
+
     /// Open the desktop UI (read-only Vault view). Edit flows land in M5b.
     Ui,
 }

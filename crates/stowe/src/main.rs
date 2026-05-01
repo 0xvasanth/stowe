@@ -129,6 +129,83 @@ fn main() -> Result<()> {
             std::process::exit(outcome.exit_code.unwrap_or(1));
         }
 
+        Command::Export {
+            output,
+            plain,
+            namespace,
+        } => {
+            let format = if plain {
+                stowe_core::ExportFormat::EnvPlain
+            } else {
+                stowe_core::ExportFormat::Encrypted
+            };
+
+            let passphrase = if plain {
+                None
+            } else {
+                let pass = dialoguer::Password::new()
+                    .with_prompt("Passphrase for encrypted export")
+                    .with_confirmation("Confirm passphrase", "Passphrases don't match")
+                    .interact()
+                    .context("reading passphrase")?;
+                Some(pass)
+            };
+
+            let vault = open_vault()?;
+
+            match output {
+                Some(path) => {
+                    stowe_core::export::export_to_path(
+                        &vault,
+                        &namespace,
+                        format,
+                        passphrase.as_deref(),
+                        std::path::Path::new(&path),
+                    )
+                    .with_context(|| format!("writing export to {}", path))?;
+                    eprintln!("wrote backup to {}", path);
+                }
+                None => {
+                    if !plain {
+                        return Err(anyhow!(
+                            "encrypted export to stdout would dump binary; pass -o <path> instead"
+                        ));
+                    }
+                    let bytes =
+                        stowe_core::export::export_to_bytes(&vault, &namespace, format, None)
+                            .context("building export")?;
+                    use std::io::Write;
+                    std::io::stdout().write_all(&bytes)?;
+                }
+            }
+        }
+
+        Command::Wipe { also_audit } => {
+            use std::io::Write;
+            eprint!("Type 'WIPE EVERYTHING' to confirm: ");
+            std::io::stderr().flush().ok();
+            let mut line = String::new();
+            std::io::stdin()
+                .read_line(&mut line)
+                .context("reading confirmation")?;
+            if line.trim() != "WIPE EVERYTHING" {
+                return Err(anyhow!("confirmation phrase mismatch; aborting"));
+            }
+
+            let mut vault = open_vault()?;
+            let audit = if also_audit {
+                Some(stowe_core::Audit::open_default().context("opening audit log")?)
+            } else {
+                None
+            };
+            let report = stowe_core::wipe::wipe_all(&mut vault, audit.as_ref(), also_audit)
+                .context("wiping vault")?;
+            println!(
+                "wiped {} namespaces, {} secrets, {} audit rows",
+                report.namespaces_deleted, report.vars_deleted, report.audit_rows_deleted
+            );
+        }
+
         Command::Ui => {
             ui::launch::launch_ui().context("launching desktop UI")?;
         }
